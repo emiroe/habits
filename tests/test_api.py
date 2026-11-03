@@ -122,3 +122,22 @@ def test_new_fields_api(c):
     ok = c.post("/api/habit", json={"name": "m", "repeat": "monthly", "mdays": "15,1"}); assert ok.status_code == 200
     assert [x for x in c.get("/api/state").json()["habits"] if x["name"] == "m"][0]["mdays"] == "1,15"
     assert c.post("/api/habit", json={"name": "w", "repeat": "weekly", "wk": 8}).status_code == 400
+
+def test_vacation_and_week_start():
+    t = D(2026, 11, 3)
+    h = H(created=D(2026, 10, 25))
+    hl = {D(2026, 11, 1): (1, False), D(2026, 11, 3): (1, False)}                    # 2 Nov missed during vacation
+    assert main.habit_stats(h, hl, t)["streak"] == 1
+    vac = [(D(2026, 11, 2), D(2026, 11, 2))]
+    assert main.habit_stats(h, hl, t, vac)["streak"] == 2                             # the paused day keeps the streak alive
+    assert main.in_vac(D(2026, 11, 2), vac) and not main.in_vac(D(2026, 11, 3), vac)
+    w = H(repeat="weekly", wk=1, created=D(2026, 10, 1))
+    wl = {D(2026, 11, 1): (1, False)}                                                  # Sunday 1 Nov: its own week with Sunday start
+    assert main.habit_stats(w, wl, D(2026, 11, 3), (), 6)["streak"] == 1
+
+def test_prefs_api(c):
+    assert c.post("/api/prefs", json={"week_start": 3}).status_code == 400
+    assert c.post("/api/prefs", json={"vacation": True, "week_start": 6}).status_code == 200
+    s = c.get("/api/state").json(); assert s["vac"] is True and s["week_start"] == 6 and len(s["vac_periods"]) == 1
+    assert c.post("/api/prefs", json={"vacation": False}).status_code == 200
+    s = c.get("/api/state").json(); assert s["vac"] is False and s["vac_periods"] == []

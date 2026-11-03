@@ -115,29 +115,32 @@ def sched(h, d):
     if r == "weekly": return True                      # any day counts, the goal is wk days per week (see habit_stats)
     if r == "monthly": return d.day in mset(h)
     return str(d.weekday()) in h["days"]
+def in_vac(d, vac):
+    return any(a <= d and (b is None or d <= b) for a, b in vac)
 def is_done(h, l): return bool(l) and not l[1] and l[0] >= h["goal"]
 def start_of(h, hl): return min([h["created"]] + list(hl))      # a habit also exists on days logged before it was created
 
-def habit_stats(h, hl, t):
+def habit_stats(h, hl, t, vac=(), ws=0):
     """hl = {day: (count, skipped)}. Streak = consecutive scheduled days done; a skipped day keeps it alive, a day not scheduled is ignored,
     today not done yet does not break it. Rate = done / due scheduled days (skipped ones excluded, today only once done)."""
     cur = best = total = hit = due = 0
     d = start_of(h, hl)
-    if h.get("repeat") == "weekly": return weekly_stats(h, hl, t)
+    if h.get("repeat") == "weekly": return weekly_stats(h, hl, t, vac, ws)
     while d <= t:
         l = hl.get(d); done = is_done(h, l)
         if done: total += 1
-        if sched(h, d) and not (l and l[1]):
+        v = in_vac(d, vac)       # vacation: nothing is due, the streak waits (doing the habit anyway still counts)
+        if (sched(h, d) and not v or v and done) and not (l and l[1]):
             if done: cur += 1; best = max(best, cur); hit += 1; due += 1
             elif d != t: cur = 0; due += 1
         d += datetime.timedelta(days=1)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
-def weekly_stats(h, hl, t):
+def weekly_stats(h, hl, t, vac=(), ws=0):
     """Weekly habit: a week succeeds with at least wk done days; the streak counts weeks. The week in progress never breaks it
     and the first (partial) week does not count against it."""
     first = start_of(h, hl); wk = max(1, h.get("wk", 1))
-    mon = lambda d: d - datetime.timedelta(days=d.weekday())
+    mon = lambda d: d - datetime.timedelta(days=(d.weekday() - ws) % 7)
     per = {}; total = 0
     for d, l in hl.items():
         if d <= t and is_done(h, l): total += 1; per[mon(d)] = per.get(mon(d), 0) + 1
@@ -145,11 +148,11 @@ def weekly_stats(h, hl, t):
     while m <= mon(t):
         ok = per.get(m, 0) >= wk
         if ok: cur += 1; best = max(best, cur); hit += 1; due += 1
-        elif m < mon(t) and m != mon(first): cur = 0; due += 1
+        elif m < mon(t) and m != mon(first) and not all(in_vac(m + datetime.timedelta(days=i), vac) for i in range(7)): cur = 0; due += 1
         m += datetime.timedelta(days=7)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
-def day_summary(habits, logs, t, n=400):
+def day_summary(habits, logs, t, n=400, vac=()):
     """[[day, done, total]] for the last n days, only days that had something scheduled. Skipped habits do not count."""
     out = []
     starts = {h["id"]: start_of(h, logs.get(h["id"], {})) for h in habits}
@@ -159,10 +162,15 @@ def day_summary(habits, logs, t, n=400):
             if d < starts[h["id"]]: continue
             l = logs.get(h["id"], {}).get(d)
             if l and l[1]: continue
-            if (sched(h, d) and h.get("repeat") != "weekly") or is_done(h, l):
+            if (sched(h, d) and h.get("repeat") != "weekly" and not in_vac(d, vac)) or is_done(h, l):
                 tt += 1; dn += is_done(h, l)
         if tt: out.append([d.isoformat(), dn, tt])
     return out
+
+def prefs(c):
+    r = dict(c.execute("SELECT key,value FROM settings WHERE key IN ('vac','week_start')").fetchall())
+    vac = [(parse_day(a), parse_day(b) if b else None) for a, b in json.loads(r.get("vac", "[]"))]
+    return vac, int(r.get("week_start", 0))
 
 def load(c, only_active_ids=None):
     habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9],
@@ -176,14 +184,39 @@ def load(c, only_active_ids=None):
 def state(req: Request):
     if not authed(req): return {"edit": False}
     t = today()
-    with pool.connection() as c: habits, logs = load(c)
+    with pool.connection() as c: habits, logs = load(c); vac, ws = prefs(c)
     lo = t - datetime.timedelta(days=LOG_DAYS)
     out = []
     for h in habits:
-        st = habit_stats(h, logs.get(h["id"], {}), t)
+        st = habit_stats(h, logs.get(h["id"], {}), t, vac, ws)
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
-    return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t)}
+    return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 400, vac), "vac": in_vac(t, vac),
+            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws}
+
+class PrefsIn(BaseModel):
+    vacation: bool | None = None
+    week_start: int | None = None
+
+@app.post("/api/prefs")
+def prefs_set(b: PrefsIn, req: Request):
+    """Vacation mode (pauses all habits from today on, stats are kept) and the first day of the week (0 = Monday, 6 = Sunday)."""
+    need_auth(req)
+    if b.week_start is not None and b.week_start not in (0, 6): raise HTTPException(400, "bad week start")
+    t = today()
+    with pool.connection() as c:
+        vac, ws = prefs(c)
+        if b.vacation is not None:
+            on = in_vac(t, vac)
+            if b.vacation and not on: vac.append((t, None))
+            elif not b.vacation and on:
+                vac = [(a, bb) for a, bb in vac if not (bb is None and a >= t)]                          # started today: forget it
+                vac = [(a, t - datetime.timedelta(days=1) if bb is None else bb) for a, bb in vac]       # otherwise it ends yesterday
+            js = json.dumps([[a.isoformat(), bb.isoformat() if bb else None] for a, bb in vac])
+            c.execute("INSERT INTO settings VALUES ('vac',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (js,))
+        if b.week_start is not None:
+            c.execute("INSERT INTO settings VALUES ('week_start',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (str(b.week_start),))
+    return {"ok": True}
 
 @app.get("/api/logs")
 def logs_range(req: Request, start: str, end: str, habit_id: int | None = None):
