@@ -274,18 +274,20 @@ async function flushQ(){
   if(flushing||!getQ().length||!S||!S.edit)return;flushing=true;let did=false;
   try{while(getQ().length){const q=getQ()[0];let r;
     try{r=await fetch("/api/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(q)})}catch(e){break}
-    if(r.status===401)break;
+    if(r.status===401||r.status>=500)break;
     setQ(getQ().slice(1));did=true}}finally{flushing=false}
   if(did&&!getQ().length){offline=false;updateOff();try{await refresh()}catch(e){}}}
 window.addEventListener("online",()=>flushQ());window.addEventListener("offline",()=>{offline=true;updateOff()});
 setInterval(flushQ,20000);
+function netFail(m,u,b){   // no connection, or the proxy says the server is down (502-504)
+  offline=true;
+  if(m==="POST"&&u==="/api/log"){const q=getQ().filter(x=>!(x.habit_id===b.habit_id&&x.day===b.day));q.push(b);setQ(q);return{count:b.count||0,skipped:!!b.skipped}}
+  updateOff();throw new Error("You are offline")}
 async function api(m,u,b){
   let r;
   try{r=await fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined})}
-  catch(e){   // no connection
-    offline=true;
-    if(m==="POST"&&u==="/api/log"){const q=getQ().filter(x=>!(x.habit_id===b.habit_id&&x.day===b.day));q.push(b);setQ(q);return{count:b.count||0,skipped:!!b.skipped}}
-    updateOff();throw new Error("You are offline")}
+  catch(e){return netFail(m,u,b)}
+  if(r.status>=502&&r.status<=504&&!u.startsWith("/api/state")&&!u.startsWith("/api/logs"))return netFail(m,u,b)
   if(u==="/api/state"||u.startsWith("/api/logs")){offline=r.headers.get("X-Offline")==="1";updateOff()}
   if(r.status===401){S={edit:false};render();throw new Error("401")}
   if(!r.ok){let e="";try{e=(await r.json()).detail}catch(_){}throw new Error(e||r.status)}
