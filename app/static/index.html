@@ -316,6 +316,12 @@ const SLOTH=`<svg viewBox="0 0 270 160" aria-hidden="true"><path d="M205 20c10-1
 <circle cx="92" cy="78" r="30" fill="#d3cabe"/><circle cx="68" cy="60" r="8" fill="#a89c90"/><ellipse cx="92" cy="80" rx="23" ry="17" fill="#b6a99c"/><ellipse cx="80" cy="76" rx="8" ry="6" fill="#4a403a" transform="rotate(-20 80 76)"/><ellipse cx="104" cy="76" rx="8" ry="6" fill="#4a403a" transform="rotate(20 104 76)"/>
 <path d="M76 76q4 4 8 0M100 76q4 4 8 0" stroke="#d3cabe" stroke-width="2" fill="none" stroke-linecap="round"/><ellipse cx="92" cy="86" rx="4" ry="3" fill="#3a3330"/><path d="M86 92q6 4 12 0" stroke="#3a3330" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 const EMPTYMSG=`${SLOTH}There's nothing due.<br>Time to create new habits!`;
+function dueCount(){   // habits still open today for the current part of day (plus anytime)
+  if(!S||!S.habits||inVac(S.today))return 0;const pn=partNow();
+  return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
+    if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length;return wd<h.wk}return true}).length}
+function updateBadge(){try{if(!navigator.setAppBadge)return;const n=PF_.badge?dueCount():0;if(n>0)navigator.setAppBadge(n).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}catch(e){}}
+setInterval(()=>{if(S&&S.edit)updateBadge()},60000);
 function render(){
   const a=$("#app");
   if(!S){a.innerHTML="";return}
@@ -338,6 +344,7 @@ function render(){
   const st=$("#strip");if(st){const sd=st.querySelector(".dy.sel");st.scrollLeft=stripX==null?(sd?sd.offsetLeft-st.clientWidth*.65:0):stripX;st.onscroll=()=>{stripX=st.scrollLeft}}
   const sh=$(".ov");if(sh)sh.remove();
   if(sheet)sheet();
+  updateBadge();
 }
 function topbar(title,left){return `<div class="top"><span class="lt">${left||""}</span><h1>${title}</h1><span class="rt"><button class="ib" id="rf" aria-label="Refresh">${IC.refresh}</button><button class="ib" data-cog aria-label="Settings">${IC.cog}</button></span></div>`}
 const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"]];
@@ -888,7 +895,7 @@ function settingsSheet(){
     if(setPg==="main"){
       ov.innerHTML=`<div class="sheet big"><h2>General<button class="x" id="cl">✕</button></h2>
       <div class="sg">${row("tod","sun","Time of day")}${row("wk","cal","Start week on",S.week_start===6?"Sunday":"Monday")}</div>
-      ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day.")}
+      ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${row("units","ruler","Units of Measure")}${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
       <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("export","tool","Export Data")}</div>
@@ -915,7 +922,8 @@ function settingsSheet(){
     ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
     ov.querySelectorAll("[data-t2]").forEach(b=>b.onclick=()=>{const k=b.dataset.t2;
       if(k==="vac"){const on=!S.vac;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{vacation:on}).then(()=>syncState()).then(()=>{dirty=true}).catch(()=>{});return}
-      PF_[k]=!PF_[k];savePref();b.querySelector(".swt").classList.toggle("on",PF_[k]);dirty=true});
+      if(k==="badge"&&!PF_.badge&&window.Notification&&Notification.permission==="default")Notification.requestPermission().then(updateBadge);
+      PF_[k]=!PF_[k];savePref();b.querySelector(".swt").classList.toggle("on",PF_[k]);dirty=true;if(k==="badge")updateBadge()});
   };
   draw();
 }
