@@ -95,7 +95,7 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 
 /* top bar extras */
 .achs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:0 0 8px}.achs+.grp,.top+.tiles+.grp{margin-top:6px}.ach .bd{width:38px!important;height:38px!important;margin-bottom:2px!important}.ach .bd svg{width:20px!important;height:20px!important}.ach b{font-size:11px!important}.ach{text-align:center;opacity:.45}.ach.on{opacity:1}.ach .bd{width:54px;height:54px;border-radius:50%;background:var(--card);margin:0 auto 4px;display:grid;place-items:center}.ach .bd svg{width:26px;height:26px}.ach b{font-size:13px}
-.sheet.big{height:100%;max-height:none;border-radius:0;overflow:auto;background:#262628;padding-top:calc(16px + env(safe-area-inset-top))}.sheet.big h2{text-align:center;position:relative;margin:2px 0 14px}.sheet.big h2 .x,.sheet.big h2 .bk{position:absolute;left:0;top:0}.sheet.big h2 .x{left:auto;right:0}
+.ov:has(.sheet.big){animation:none;background:#262628}.sheet.big{animation:none!important;height:100%;max-height:none;border-radius:0;overflow:auto;background:#262628;padding-top:calc(16px + env(safe-area-inset-top))}.sheet.big h2{text-align:center;position:relative;margin:2px 0 14px}.sheet.big h2 .x,.sheet.big h2 .bk{position:absolute;left:0;top:0}.sheet.big h2 .x{left:auto;right:0}
 .sheet.big h2.sh{display:flex;align-items:center;justify-content:center;padding:0 36px;min-height:32px;text-align:center}.sheet.big h2.sh .bk{width:32px;height:32px;align-items:center;justify-content:flex-start}.sh .bk{display:flex}.sh .bk svg{width:22px;height:22px}.sg{background:#333335;border-radius:18px;margin:0 0 12px;overflow:hidden}.sc{margin:0 0 12px}.sc .sg,.sc .srw{border-radius:18px}.sc .srw{background:#333335}.sc p{margin:6px 6px 0;color:#8c8c92;font-size:12.500px;font-weight:300}
 .srw{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;font-size:17px;text-align:left}.sg .srw+.srw{border-top:1px solid #3d3d40}.srw .si{width:24px;height:24px;flex:none}.srw span{flex:1}.srw em{font-style:normal;color:#8c8c92;font-size:15px}.srw .chv{width:16px;height:16px;color:#8c8c92}.ck{color:var(--ac)}
 .swt{width:50px;height:30px;border-radius:15px;background:#48484c;position:relative;flex:none;transition:background .2s}.swt::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s}.swt.on{background:#1e90ff}.swt.on::after{transform:translateX(20px)}
@@ -954,7 +954,7 @@ function settingsSheet(){
       PF_[k]=!PF_[k];savePref();b.querySelector(".swt").classList.toggle("on",PF_[k]);dirty=true;if(k==="badge")updateBadge()});
   };
   draw();
-  pushSub().then(x=>{pushOn=!!x&&Notification.permission==="granted";if(setPg==="main"&&document.body.contains(ov))draw()}).catch(()=>{});
+  pushSub().then(x=>{pushOn=!!x&&Notification.permission==="granted";const w=ov.querySelector('[data-t2="push"] .swt');if(w)w.classList.toggle("on",pushOn)}).catch(()=>{});
 }
 /* ---------- stats ---------- */
 const HM10=["#d8ec84","#c2e070","#aad45f","#92c850","#7ab943","#62a838","#4c962f","#388427","#2a731f","#1f6318"];   // same 10 greens as the Chinese tracker heat map
