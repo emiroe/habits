@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install fastapi "uvicorn[standard]" "psycopg[binary]" psycopg_pool httpx pytest
+      - run: pip install fastapi "uvicorn[standard]" "psycopg[binary]" psycopg_pool pywebpush httpx pytest
       - run: cd app && python -m pytest ../tests -q
       - name: Docker image builds
         run: docker build -t habits:ci .
