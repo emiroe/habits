@@ -17,8 +17,9 @@ async function networkFirst(r, key, api) {
   const c = await caches.open(CACHE), k = key || r;
   try {
     const res = await fetch(r);
-    if (res.ok) c.put(k, res.clone());
-    return res;
+    if (res.ok) { c.put(k, res.clone()); return res }
+    if (res.status < 500) return res;
+    throw new Error("server error");        // 502/503/504 from the proxy = server down: use the cache like offline
   } catch (x) {
     const m = await c.match(k);
     if (!m) return new Response("offline", { status: 503 });
