@@ -439,6 +439,7 @@ def timer_stop(req: Request):
 # studied on the Chinese tracker (the tracker is the timer; the daily goal follows the tracker's goal) ----
 POMODORO_URL = os.environ.get("POMODORO_URL", "https://pomodoro.romijn.app")
 CHINESE_URL = os.environ.get("CHINESE_URL", "https://chinese.romijn.app")
+READING_URL = os.environ.get("READING_URL", "https://reading.romijn.app")
 SYNC_FROM = os.environ.get("SYNC_FROM", "2026-11-03")      # synced habits ignore tracker data before this day
 def sync_counts(src):
     """-> ({day: count}, goal) from the public /api/state of the tracker."""
@@ -448,13 +449,20 @@ def sync_counts(src):
         for x in d.get("sessions", []):
             if x.get("pomodoro"): per[x["day"]] = per.get(x["day"], 0) + 1
         return per, int(d.get("settings", {}).get("daily_goal", 0))
+    if src == "reading":     # KoInsight page stats: start_time in ms, duration in seconds; days in Dutch local time
+        from zoneinfo import ZoneInfo
+        d = json.load(urllib.request.urlopen(READING_URL + "/api/stats", timeout=20)); sec = {}
+        for x in d.get("stats", []):
+            day = datetime.datetime.fromtimestamp(x["start_time"] / 1000, ZoneInfo("Europe/Amsterdam")).date().isoformat()
+            sec[day] = sec.get(day, 0) + x["duration"]
+        return {k: round(v / 60) for k, v in sec.items()}, 0
     d = json.load(urllib.request.urlopen(CHINESE_URL + "/api/state", timeout=10)); sec = {}
     for x in d.get("sessions", []): sec[x["day"]] = sec.get(x["day"], 0) + x["seconds"]
     return {k: round(v / 60) for k, v in sec.items()}, int(d.get("daily_minutes", 0))
 
 def tracker_sync():
     t = today(); changed = False
-    for src in ("pomodoro", "chinese"):
+    for src in ("pomodoro", "chinese", "reading"):
         with pool.connection() as c: hs = [r[0] for r in c.execute("SELECT id FROM habits WHERE sync=%s", (src,)).fetchall()]
         if not hs: continue
         try: per, goal = sync_counts(src)
@@ -604,7 +612,7 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
-    if b.sync not in (None, "", "pomodoro", "chinese"): raise HTTPException(400, "bad sync")
+    if b.sync not in (None, "", "pomodoro", "chinese", "reading"): raise HTTPException(400, "bad sync")
     if b.remind:
         try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
         except Exception: raise HTTPException(400, "bad reminder time")

@@ -255,3 +255,13 @@ def test_sync_ignores_days_before_start(c, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"sessions": [{"day": old, "seconds": 600}, {"day": t, "seconds": 600}], "daily_minutes": 60}).encode()))
     main.tracker_sync()
     assert [l[1] for l in c.get("/api/state").json()["logs"] if l[0] == hid] == [t]
+
+def test_reading_sync(c, monkeypatch):
+    import io, urllib.request
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Read", "unit": "min", "goal": 20, "sync": "reading"}).json()["id"]
+    now = int(datetime.datetime.now().timestamp() * 1000)
+    monkeypatch.setattr(main, "SYNC_FROM", "2000-01-01")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"stats": [{"start_time": now, "duration": 600}, {"start_time": now + 1000, "duration": 900}]}).encode()))
+    main.tracker_sync()
+    s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [25] and s["habits"][0]["goal"] == 20
