@@ -259,6 +259,7 @@ const add=(d,n)=>{const x=dt(d);x.setUTCDate(x.getUTCDate()+n);return iso(x)};
 const wday=d=>(dt(d).getUTCDay()+6)%7;
 const wsOff=()=>S&&S.week_start===6?6:0,wcol=d=>(wday(d)-wsOff()+7)%7,WDR=()=>wsOff()?[WD[6],...WD.slice(0,6)]:WD,WDI=()=>wsOff()?[6,0,1,2,3,4,5]:[0,1,2,3,4,5,6];
 const mon=d=>add(d,-wcol(d));
+const hmon=(h,d)=>(h.repeat==="weekly"&&(h.days||"").length===1)?add(d,-((wday(d)-(+h.days)+7)%7)):mon(d);   // a weekly habit with one digit in days has its own week start
 const inVac=d=>(S&&S.vac_periods||[]).some(q=>d>=q[0]&&(!q[1]||d<=q[1]));
 const hex=(c,a)=>c+Math.round(a*255).toString(16).padStart(2,"0");
 
@@ -345,7 +346,8 @@ const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return 
   if(r==="monthly")return(h.mdays||"").split(",").includes(String(+d.slice(8)));return h.days.includes(String(wday(d)))};
 const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};
 const mDone=(h,d)=>{let n=0;for(let i=1;i<=31;i++)if(isDone(h,d.slice(0,8)+String(i).padStart(2,"0")))n++;return n};
-function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(h.repeat==="month"&&!inVac(d)){return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&mDone(h,d)<h.wk)}if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
+function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(h.repeat==="weekly"&&(h.days||"").length===1&&!inVac(d)){const a=hmon(h,S.today);return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&[0,1,2,3,4,5,6].filter(i=>isDone(h,add(a,i))).length<h.wk)}
+  if(h.repeat==="month"&&!inVac(d)){return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&mDone(h,d)<h.wk)}if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
 function dayProg(d){const v=visible(d).filter(h=>!lg(h,d)[1]);return [v.filter(h=>isDone(h,d)).length,v.length]}
 
 function ring(p,size,w,col,track){
@@ -385,7 +387,7 @@ function dueCount(){   // habits still open today for the current part of day (p
   if(!S||!S.habits||inVac(S.today))return 0;const pn=partNow();
   return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"&&h.period!=="chores"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
     if(h.repeat==="month")return mDone(h,S.today)<h.wk;
-    if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length;return wd<h.wk}return true}).length}
+    if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(hmon(h,S.today),i))).length;return wd<h.wk}return true}).length}
 function updateBadge(){try{if(!navigator.setAppBadge)return;const n=PF_.badge?dueCount():0;if(n>0)navigator.setAppBadge(n).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}catch(e){}}
 setInterval(()=>{if(S&&S.edit)updateBadge()},60000);
 function render(){
@@ -476,9 +478,9 @@ setInterval(()=>{const t=tget();keepAwake();if(!t)return;
     if(tlast!==null&&tlast!==i.i&&navigator.vibrate)navigator.vibrate(200);tlast=i.i}},1000);
 function card(h,d){
   const l=lg(h,d),dn=isDone(h,d),sk=l[1];
-  const wd=h.repeat==="weekly"?[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length:0;
+  const wd=h.repeat==="weekly"?[0,1,2,3,4,5,6].filter(i=>isDone(h,add(hmon(h,S.today),i))).length:0;
   const pz=inVac(d)&&!dn&&!sk;
-  const sub=sk?"Skipped":pz?"Paused":h.repeat==="month"?`${mDone(h,S.today)}/${h.wk} this month`:h.repeat==="weekly"?`${wd}/${Math.min(h.wk,[0,1,2,3,4,5,6].filter(i=>!inVac(add(mon(S.today),i))).length)} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
+  const sub=sk?"Skipped":pz?"Paused":h.repeat==="month"?`${mDone(h,S.today)}/${h.wk} this month`:h.repeat==="weekly"?`${wd}/${Math.min(h.wk,[0,1,2,3,4,5,6].filter(i=>!inVac(add(hmon(h,S.today),i))).length)} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
   let right;
   if(h.kind==="timer"){
     const t=tget(),mine=!!t&&t.id===h.id;
@@ -932,7 +934,7 @@ function editPage(h,tpl,fromPicker){
       ${f.kind==="timer"?ivHtml:`<button class="gl" data-gl="1"><span>${esc(goalText(f))}</span>${CHR}</button>`}`:""}</div>
     <div class="cd"><button class="rw" data-tgl="tod"><span>${tod}</span>${CH}</button>
       ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button><button class="chip2 wide ${f.period==="chores"?"on":""}" data-p="chores">Chores</button></div>`:""}</div>
-    ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync count with</span></div><div class="seg">${[["","Off"],["pomodoro","Pomodoro"],["chinese","Mandarin"],["reading","Reading"],["trash","Trash"]].map(([v,l])=>`<button class="${(f.sync||"")===v?"on":""}" data-sync="${v}">${l}</button>`).join("")}</div>${f.sync?`<p class="note" style="margin:0 16px 12px">${f.sync==="pomodoro"?"The count follows the pomodoros you finish on pomodoro.romijn.app.":f.sync==="reading"?"The count follows the minutes you read on reading.romijn.app.":f.sync==="trash"?"Due only on waste collection days, taken from Home Assistant.":"The count follows the minutes you study on chinese.romijn.app."}</p>`:""}</div>`:""}
+    ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync count with</span></div><div class="seg">${[["","Off"],["pomodoro","Pomodoro"],["chinese","Mandarin"],["reading","Reading"],["trash","Trash"],["homework","Homework"]].map(([v,l])=>`<button class="${(f.sync||"")===v?"on":""}" data-sync="${v}">${l}</button>`).join("")}</div>${f.sync?`<p class="note" style="margin:0 16px 12px">${f.sync==="pomodoro"?"The count follows the pomodoros you finish on pomodoro.romijn.app.":f.sync==="reading"?"The count follows the minutes you read on reading.romijn.app.":f.sync==="homework"?"Done when you log a Homework session on chinese.romijn.app.":f.sync==="trash"?"Due only on waste collection days, taken from Home Assistant.":"The count follows the minutes you study on chinese.romijn.app."}</p>`:""}</div>`:""}
     <div class="cd"><div class="rw"><span>Remind me at</span><button class="tg ${ui.rem?"on":""}" data-tg="rem" role="switch" aria-checked="${ui.rem}" aria-label="Remind me"></button></div>
       ${ui.rem?`<div class="hl"></div><div class="rw"><span>Time</span><input class="dt" type="time" id="rt" value="${f.remind||"09:00"}"></div>`:""}</div>
     <div class="err" id="er"></div>${h?`<button class="del" id="del">Delete habit</button>`:""}`;

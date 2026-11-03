@@ -289,3 +289,14 @@ def test_month_habit(c):
     h = c.get("/api/state").json()["habits"][0]; assert h["streak"] == 1 and h["total"] == 1
     with main.pool.connection() as cn: hs, lg = main.load(cn)
     assert main.open_habits(hs, lg, main.today(), [], 0, main.PERIODS) == []       # done this month: no longer open
+
+def test_homework_sync_and_own_week(c, monkeypatch):
+    import io, urllib.request
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "HW", "repeat": "weekly", "wk": 1, "days": "2", "sync": "homework"}).json()["id"]
+    t = main.today().isoformat(); monkeypatch.setattr(main, "SYNC_FROM", "2000-01-01")
+    sess = [{"day": t, "seconds": 600, "activity": "Homework"}, {"day": t, "seconds": 60, "activity": "Class"}]
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"sessions": sess, "daily_minutes": 120}).encode()))
+    main.tracker_sync()
+    s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [1]
+    assert main.hws({"repeat": "weekly", "days": "2"}, 0) == 2 and main.hws({"repeat": "weekly", "days": "0123456"}, 0) == 0

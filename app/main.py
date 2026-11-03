@@ -150,10 +150,13 @@ def habit_stats(h, hl, t, vac=(), ws=0):
         d += datetime.timedelta(days=1)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
+def hws(h, ws):
+    """First weekday of a weekly habit's week: a single digit in `days` (0=Mon) gives that habit its own week start, else the global one."""
+    return int(h["days"]) if h.get("repeat") == "weekly" and len(h.get("days") or "") == 1 and h["days"].isdigit() else ws
 def weekly_stats(h, hl, t, vac=(), ws=0):
     """Weekly habit: a week succeeds with at least wk done days; the streak counts weeks. The week in progress never breaks it
     and the first (partial) week does not count against it."""
-    first = start_of(h, hl); wk = max(1, h.get("wk", 1))
+    ws = hws(h, ws); first = start_of(h, hl); wk = max(1, h.get("wk", 1))
     mon = lambda d: d - datetime.timedelta(days=(d.weekday() - ws) % 7)
     per = {}; total = 0
     for d, l in hl.items():
@@ -318,12 +321,13 @@ def open_habits(habits, logs, t, vac, ws, parts):
     """Habits still to do today in the given parts of the day."""
     if in_vac(t, vac): return []
     out = []
-    mon = t - datetime.timedelta(days=(t.weekday() - ws) % 7)
     for h in habits:
         if h["period"] not in parts or not sched(h, t) or t < h["created"]: continue
         l = logs.get(h["id"], {}).get(t)
         if (l and l[1]) or is_done(h, l): continue
-        if h["repeat"] == "weekly" and sum(is_done(h, logs.get(h["id"], {}).get(mon + datetime.timedelta(days=i))) for i in range(7)) >= h["wk"]: continue
+        if h["repeat"] == "weekly":
+            mon = t - datetime.timedelta(days=(t.weekday() - hws(h, ws)) % 7)
+            if sum(is_done(h, logs.get(h["id"], {}).get(mon + datetime.timedelta(days=i))) for i in range(7)) >= h["wk"]: continue
         if h["repeat"] == "month" and sum(is_done(h, v) for dd, v in logs.get(h["id"], {}).items() if (dd.year, dd.month) == (t.year, t.month)) >= h["wk"]: continue
         out.append(h)
     return out
@@ -490,12 +494,13 @@ def sync_counts(src):
             sec[day] = sec.get(day, 0) + x["duration"]
         return {k: round(v / 60) for k, v in sec.items()}, 0
     d = json.load(urllib.request.urlopen(CHINESE_URL + "/api/state", timeout=10)); sec = {}
+    if src == "homework": return {x["day"]: 1 for x in d.get("sessions", []) if x.get("activity") == "Homework"}, 1
     for x in d.get("sessions", []): sec[x["day"]] = sec.get(x["day"], 0) + x["seconds"]
     return {k: round(v / 60) for k, v in sec.items()}, int(d.get("daily_minutes", 0))
 
 def tracker_sync():
     t = today(); changed = False
-    for src in ("pomodoro", "chinese", "reading"):
+    for src in ("pomodoro", "chinese", "reading", "homework"):
         with pool.connection() as c: hs = [r[0] for r in c.execute("SELECT id FROM habits WHERE sync=%s", (src,)).fetchall()]
         if not hs: continue
         try: per, goal = sync_counts(src)
@@ -645,7 +650,7 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
-    if b.sync not in (None, "", "pomodoro", "chinese", "reading", "trash"): raise HTTPException(400, "bad sync")
+    if b.sync not in (None, "", "pomodoro", "chinese", "reading", "trash", "homework"): raise HTTPException(400, "bad sync")
     if b.remind:
         try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
         except Exception: raise HTTPException(400, "bad reminder time")
