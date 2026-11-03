@@ -283,6 +283,11 @@ async function flushQ(){
   if(did&&!getQ().length){offline=false;updateOff();try{await refresh()}catch(e){}}}
 window.addEventListener("online",()=>flushQ());window.addEventListener("offline",()=>{offline=true;updateOff()});
 setInterval(flushQ,20000);
+const STKEY="hbState";
+function stateCopy(){   // server unreachable: the last state we saw (kept in localStorage, also when the service worker has nothing)
+  let st=null;try{st=JSON.parse(localStorage.getItem(STKEY)||"null")}catch(e){}
+  if(!st||!st.edit){offline=true;updateOff();throw new Error("You are offline and there is nothing saved yet. Open the app once with a connection.")}
+  st.today=new Date().toLocaleDateString("sv");offline=true;updateOff();return st}
 function netFail(m,u,b){   // no connection, or the proxy says the server is down (502-504)
   offline=true;
   if(m==="POST"&&u==="/api/log"){const q=getQ().filter(x=>!(x.habit_id===b.habit_id&&x.day===b.day));q.push(b);setQ(q);return{count:b.count||0,skipped:!!b.skipped}}
@@ -290,9 +295,11 @@ function netFail(m,u,b){   // no connection, or the proxy says the server is dow
 async function api(m,u,b){
   let r;
   try{r=await fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined})}
-  catch(e){return netFail(m,u,b)}
-  if(r.status>=502&&r.status<=504&&!u.startsWith("/api/state")&&!u.startsWith("/api/logs"))return netFail(m,u,b)
+  catch(e){if(m==="GET"&&u==="/api/state")return stateCopy();return netFail(m,u,b)}
+  if(r.status>=502&&r.status<=504&&u==="/api/state")return stateCopy();
+  if(r.status>=502&&r.status<=504&&!u.startsWith("/api/logs"))return netFail(m,u,b)
   if(u==="/api/state"||u.startsWith("/api/logs")){offline=r.headers.get("X-Offline")==="1";updateOff()}
+  if(u==="/api/state"&&r.ok&&r.headers.get("X-Offline")!=="1"){const c=r.clone();c.json().then(j=>{if(j&&j.edit)try{localStorage.setItem(STKEY,JSON.stringify(j))}catch(e){}}).catch(()=>{})}
   if(r.status===401){S={edit:false};render();throw new Error("401")}
   if(!r.ok){let e="";try{e=(await r.json()).detail}catch(_){}throw new Error(e||r.status)}
   return r.json();
@@ -1003,7 +1010,7 @@ function settingsSheet(){
       <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("diag","note","Diagnostics")}</div><div class="sg">${row("export","tool","Export Data")}</div>
       <div class="sg">${row("pw","lock","Change password")}<button class="srw" id="lo" style="color:#ff5c5c"><span>Sign out</span></button></div></div>`;
       $("#cl").onclick=close;
-      $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});localStorage.removeItem(QKEY);if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage("clear");close();S={edit:false};render()};
+      $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});localStorage.removeItem(QKEY);localStorage.removeItem(STKEY);if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage("clear");close();S={edit:false};render()};
     }else{
       const P={tod:pick("Time of day",[["Morning ends at","mEnd",[10,11,12,13].map(n=>[n,hh(n)])],["Evening starts at","eStart",[16,17,18,19,20].map(n=>[n,hh(n)])]]),
         wk:pick("Start week on",[["","wk",["Monday","Sunday"].map(x=>[x,x])]],S.week_start===6?"Sunday":"Monday"),units:pick("Units of Measure",[["","units",[["metric","Metric"],["imperial","Imperial"]]]]),slate:`<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>Clean Slate Protocol</h2><p style="color:#8c8c92;font-weight:300;margin:6px 4px 16px;line-height:1.45">This permanently deletes <b style="color:#fff;font-weight:600">all your habits and all their history</b>: streaks, check-ins and statistics. Your password and settings stay. This cannot be undone.</p><button class="btn red" id="s1">Continue</button>`,
@@ -1099,7 +1106,7 @@ document.addEventListener("pointerdown",e=>{const t=e.target.closest&&e.target.c
 document.addEventListener("pointermove",e=>{if(e.pointerType!=="touch"||e.buttons===0)return;const t=document.elementFromPoint(e.clientX,e.clientY),c=t&&t.closest&&t.closest("[data-tip]");if(c&&c!==tipEl)showTip(c)});
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("#rf");if(t){t.classList.add("spin");try{sessionStorage.setItem("hbNav",JSON.stringify({tab,per,sel}))}catch(e){}setTimeout(()=>location.reload(),250);return}
   if(e.target.closest&&e.target.closest("[data-cog]")){sheet=settingsSheet;render()}});
-load().then(()=>flushQ()).catch(()=>{});
+load().then(()=>flushQ()).catch(e=>{if(e&&e.message==="401")return;const a=document.getElementById("app");if(a&&!a.innerHTML.trim())a.innerHTML=`<div class="login"><h1 style="margin:0 0 8px">Habits</h1><p style="color:var(--dim)">${esc(e&&e.message||e)}</p><button class="btn" onclick="location.reload()">Try again</button></div>`});
 const fixNav=()=>{const n=document.querySelector("nav");if(n){n.style.display="none";void n.offsetHeight;n.style.display=""}};   // iOS can leave the bottom bar mid-screen after a dialog or keyboard
 document.addEventListener("focusout",()=>setTimeout(fixNav,300));
 if(window.visualViewport)visualViewport.addEventListener("resize",()=>setTimeout(fixNav,100));
