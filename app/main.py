@@ -201,7 +201,7 @@ def state(req: Request):
         st = habit_stats(h, logs.get(h["id"], {}), t, vac, ws)
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
-    return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 400, vac), "vac": in_vac(t, vac),
+    return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 1100, vac), "vac": in_vac(t, vac),
             "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, **pp, "push_key": vapid()[1]}
 
 class PrefsIn(BaseModel):

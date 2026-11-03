@@ -225,8 +225,10 @@ input.t:focus{outline:0;border-color:var(--ac)}
 .bars{display:flex;align-items:flex-end;gap:5px;height:74px;background:var(--card);padding:8px 10px;border-radius:14px;touch-action:none;box-shadow:var(--sh)}
 .bars div{flex:1;border-radius:4px 4px 2px 2px;background:var(--ac);min-height:3px}
 .bl{display:flex;gap:5px;padding:0 10px;font-size:9px;color:var(--dim);margin-top:3px}.bl span{flex:1;text-align:center}.bl b{display:block;font-size:10px;font-weight:700;color:var(--txt);margin-top:1px}
-.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,auto);grid-auto-columns:1fr;gap:2px;background:var(--card);padding:8px;border-radius:14px;touch-action:none}
-.heat i{aspect-ratio:1;border-radius:2px;background:var(--card2)}
+.hscroll{overflow-x:auto;background:var(--card);border-radius:14px;touch-action:pan-x;-webkit-overflow-scrolling:touch;scrollbar-width:none}.hscroll::-webkit-scrollbar{display:none}
+.hin{display:inline-block;padding:8px}.hml{display:grid;grid-auto-flow:column;grid-auto-columns:13px;gap:2px;height:13px;margin-bottom:3px}.hml span{font-size:9px;color:var(--dim);white-space:nowrap;overflow:visible;line-height:13px}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,13px);grid-auto-columns:13px;gap:2px}
+.heat i{border-radius:2px;background:var(--card2)}
 .rk{display:flex;align-items:center;gap:10px;background:var(--card);padding:7px 12px;border-radius:14px;margin-bottom:6px}
 .rk .em{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
 .rk .tx{flex:1;min-width:0}.rk b{display:block;font-size:14px;font-weight:600}.rk .ms{display:flex;gap:2px;margin-top:1px}.rk .ms u{width:34px;text-decoration:none;display:flex;align-items:center;gap:2px;font-size:12px;color:var(--dim)}.rk .ms .ic{width:12px;height:12px;margin:0}.rk .pb{height:4px;border-radius:9px;background:var(--card2);margin-top:4px;overflow:hidden}.rk .pb i{display:block;height:100%;border-radius:9px}
@@ -351,6 +353,7 @@ function render(){
   const sh=$(".ov");if(sh)sh.remove();
   if(sheet)sheet();
   updateBadge();
+  const hs=document.querySelector(".hscroll");if(hs)hs.scrollLeft=hs.scrollWidth;
 }
 function topbar(title,left){return `<div class="top"><span class="lt">${left||""}</span><h1>${title}</h1><span class="rt"><button class="ib" id="rf" aria-label="Refresh">${IC.refresh}</button><button class="ib" data-cog aria-label="Settings">${IC.cog}</button></span></div>`}
 const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"]];
@@ -1031,13 +1034,15 @@ function viewStats(){
     bars+=`<div data-tip="Week of ${fd(a)} · ${Math.round(v*100)}%" style="height:${Math.max(4,v*100)}%;background:${v>0?HM10[Math.min(9,Math.ceil(v*10)-1)]:"#3a3a3d"}"></div>`;lbl+=`<span>${+a.slice(8)}/${+a.slice(5,7)}<b>${Math.round(v*100)}%</b></span>`;
   }
   h+=`<div class="sec">Weekly completion</div><div class="bars">${bars}</div><div class="bl">${lbl}</div>`;
-  let cells="";const st=add(wk,-7*25);
-  for(let i=0;i<26*7;i++){
+  let cells="",ml="";const first=S.days.length?S.days[0][0]:S.today,W=Math.max(53,Math.round((dt(wk)-dt(mon(first)))/6048e5)+1),st=add(wk,-7*(W-1));
+  for(let w=0;w<W;w++){const m0=add(st,7*w),mm=dt(m0).getUTCMonth(),prev=w?dt(add(m0,-7)).getUTCMonth():-1;
+    ml+=`<span>${mm!==prev?dt(m0).toLocaleDateString("en-GB",{month:"short",timeZone:"UTC"}):""}</span>`}
+  for(let i=0;i<W*7;i++){
     const d=add(st,i);if(d>S.today){cells+=`<i style="opacity:0"></i>`;continue}
     const x=map[d],p=x?x[1]/x[2]:-1;
     cells+=`<i data-tip="${fd(d)} · ${x?`${x[1]} of ${x[2]} done`:"nothing scheduled"}" style="${p<0?"":p===0?"background:#3a3a3d":`background:${HM10[Math.min(9,Math.ceil(p*10)-1)]}`}"></i>`;
   }
-  h+=`<div class="sec">Last 26 weeks</div><div class="heat">${cells}</div><div class="hmleg"><span>Less</span>${HM10.map(c=>`<i style="background:${c}"></i>`).join("")}<span>More</span></div><div class="sec">Habits</div>`;
+  h+=`<div class="sec">Activity</div><div class="hscroll"><div class="hin"><div class="hml">${ml}</div><div class="heat">${cells}</div></div></div>`+`<div class="hmleg"><span>Less</span>${HM10.map(c=>`<i style="background:${c}"></i>`).join("")}<span>More</span></div><div class="sec">Habits</div>`;
   if(!S.habits.length)h+=`<div class="empty">No habits yet.</div>`;
   const mi=(k,c)=>ico({emoji:"ic:"+k,color:c});
   for(const x of [...S.habits].sort((a,b)=>(b.rate??-1)-(a.rate??-1)))
