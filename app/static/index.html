@@ -227,7 +227,8 @@ const COLORS=["#ffffff","#c7c7cc","#1e90ff","#2aa8ff","#00b8a9","#2ecc71","#a3e6
 const EMOJI="💧 🏃 🧘 📚 📖 ✍️ 🛏️ 🥗 🍎 🍽️ 💊 🦷 🧼 🚿 🧹 🚭 🍷 📵 💻 🖥️ 🎸 🎨 🌱 🐕 🐈 ☀️ 🌙 🚴 🚶 🏋️ 💪 🤸 🧠 🇨🇳 🌍 🎧 💰 📝 📓 🙏 ☕ 🥤 🍳 🥣 ⏰ 🍅 😷 🧴 👔 📞 😴 ❤️ ⭐ 🎯 🔥 🧺 🥛 🌿 🕯️".split(" ");
 const PER={morning:["Morning","🌅"],afternoon:["Afternoon","☀️"],evening:["Evening","🌙"],anytime:["Anytime","🕒"]};
 const WD=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-let S=null,sel=null,tab="today",per="all",stripX=null,logs={},loaded=null,sheet=null;
+const partNow=()=>{const h=new Date().getHours();return h<12?"morning":h<18?"afternoon":"evening"};
+let S=null,sel=null,tab="today",per=partNow(),hiddenAt=0,stripX=null,logs={},loaded=null,sheet=null;
 
 const dt=d=>new Date(d+"T12:00:00Z"), iso=d=>d.toISOString().slice(0,10);
 const add=(d,n)=>{const x=dt(d);x.setUTCDate(x.getUTCDate()+n);return iso(x)};
@@ -859,5 +860,8 @@ function viewStats(){
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("#rf");if(t){t.classList.add("spin");setTimeout(()=>location.reload(),250);return}
   if(e.target.closest&&e.target.closest("[data-cog]")){sheet=settingsSheet;render()}});
 load().catch(()=>{});
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S&&S.edit&&!sheet)refresh().catch(()=>{})});
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){hiddenAt=Date.now();return}
+  if(hiddenAt&&Date.now()-hiddenAt>20*60*1000&&per!=="all"&&per!==partNow()&&!document.querySelector(".pg")){per=partNow();if(S&&S.edit&&tab==="today")render()}   // back after a while: jump to the current part of the day
+  if(S&&S.edit&&!sheet)refresh().catch(()=>{})});
 </script></body></html>
