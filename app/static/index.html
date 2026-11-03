@@ -171,6 +171,10 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 .sheet .cal div.c.jl::before{left:0;right:50%}.sheet .cal div.c.jr::after{left:50%;right:0}
 .sheet .btn{padding:11px;font-size:15px;margin-top:8px;border-radius:14px}.sheet .btn .eb{display:inline-block;width:16px;height:16px;vertical-align:-2px;margin-right:6px}.sheet .btn .eb .ic{width:16px;height:16px}
 .sheet .step{margin:8px 0}.sheet .step button{width:40px;height:40px}.sheet .step b{font:600 24px/1 -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-variant-numeric:tabular-nums;min-width:110px;text-align:center}.sheet .step b small{font-size:14px;font-weight:500;color:var(--dim)}.tile b{font-family:-apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-weight:700}
+.dz{min-height:8px}.dz:empty{min-height:44px;border:1.5px dashed #3c3c3f;border-radius:14px;margin-bottom:8px;display:flex;align-items:center;justify-content:center}.dz:empty::before{content:"Drag a habit here";color:#6f6f75;font-size:13px;font-weight:300}
+.mg .grip{flex:none;width:52px;display:flex;align-items:center;justify-content:center;color:#8c8c92;touch-action:none;cursor:grab}.mg .grip svg.i{width:22px;height:22px;stroke-width:2.2}
+.mg.ghost{opacity:.25}.mg.drag{position:fixed;z-index:70;margin:0;box-shadow:0 10px 28px rgba(0,0,0,.55);opacity:.96;background:var(--row);pointer-events:none}
+body.dragging{user-select:none;-webkit-user-select:none;cursor:grabbing}
 /* sheets */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fade .2s}
 @keyframes fade{from{opacity:0}}
@@ -436,21 +440,55 @@ function bindSwipe(w){
   row.addEventListener("click",e=>{if(Date.now()-swiped<350){e.stopPropagation();e.preventDefault()}},true);
 }
 const daysText=x=>{const r=x.repeat||"daily";if(r==="once")return"Once";if(r==="weekly")return`${x.wk||1}× per week`;if(r==="monthly")return"Monthly on "+(x.mdays||"").split(",").join(", ");return x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ")};
+const GRIP='<svg class="i" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
 function viewHabits(){
   let h=topbar("Habits");
   if(!S.habits.length)return h+`<div class="empty">${EMPTYMSG}</div>`;
-  S.habits.forEach((x,i)=>{
-    h+=`<div class="h mg"><button class="tx" data-edit="${x.id}"><span class="em">${ico(x)}</span><span class="nm"><b>${esc(x.name)}</b><small>${daysText(x)} · ${PER[x.period][0]}${x.kind==="timer"?` · ${x.goal} min`:x.goal>1?` · ${x.goal} ${esc(x.unit||"times")}`:""}</small></span></button>
-    <div class="mv"><button data-mv="${x.id}" data-dir="-1" ${i?"":"disabled"} aria-label="Move up">▲</button><button data-mv="${x.id}" data-dir="1" ${i<S.habits.length-1?"":"disabled"} aria-label="Move down">▼</button></div></div>`;
-  });
+  for(const [k,l] of GROUPS){
+    h+=`<div class="grp">${l}</div><div class="dz" data-sec="${k}">`;
+    for(const x of S.habits.filter(y=>y.period===k))
+      h+=`<div class="h mg" data-id="${x.id}"><button class="tx" data-edit="${x.id}"><span class="em">${ico(x)}</span><span class="nm"><b>${esc(x.name)}</b><small>${daysText(x)}${x.kind==="timer"?` · ${x.goal} min`:x.goal>1?` · ${x.goal} ${esc(x.unit||"times")}`:""}</small></span></button><button class="grip" aria-label="Drag to reorder">${GRIP}</button></div>`;
+    h+=`</div>`;
+  }
   return h;
 }
 function bindHabits(){
   document.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openEdit(S.habits.find(x=>x.id===+b.dataset.edit)));
-  document.querySelectorAll("[data-mv]").forEach(b=>b.onclick=async()=>{
-    const ids=S.habits.map(x=>x.id),i=ids.indexOf(+b.dataset.mv),j=i+ +b.dataset.dir;if(j<0||j>=ids.length)return;
-    [ids[i],ids[j]]=[ids[j],ids[i]];await api("POST","/api/habits/order",{ids});await refresh();
-  });
+  document.querySelectorAll(".grip").forEach(g=>g.addEventListener("pointerdown",e=>startDrag(e,g.closest(".mg"))));
+}
+// drag a habit by its grip: reorder inside a section or drop it into another one (which changes its time of day)
+function startDrag(e,row){
+  if(e.button>0)return;e.preventDefault();
+  const r=row.getBoundingClientRect(),oy=e.clientY-r.top;
+  const clone=row.cloneNode(true);clone.classList.add("drag");clone.style.cssText=`left:${r.left}px;width:${r.width}px;top:${r.top}px`;
+  document.body.appendChild(clone);row.classList.add("ghost");document.body.classList.add("dragging");
+  let y=e.clientY,raf=0;
+  const loop=()=>{
+    clone.style.top=(y-oy)+"px";
+    const zones=[...document.querySelectorAll(".dz")];let z=zones[0];
+    for(const q of zones)if(q.previousElementSibling.getBoundingClientRect().top<=y)z=q;
+    let before=null;for(const q of z.querySelectorAll(".mg:not(.ghost)")){const b=q.getBoundingClientRect();if(y<b.top+b.height/2){before=q;break}}
+    if(row.parentNode!==z||row.nextElementSibling!==before)z.insertBefore(row,before);
+    if(y<100)scrollBy(0,-12);else if(y>innerHeight-140)scrollBy(0,12);
+    raf=requestAnimationFrame(loop);
+  };
+  const mv=ev=>{y=ev.clientY};
+  const end=async ev=>{
+    removeEventListener("pointermove",mv);removeEventListener("pointerup",end);removeEventListener("pointercancel",end);
+    cancelAnimationFrame(raf);clone.remove();row.classList.remove("ghost");document.body.classList.remove("dragging");
+    const ns=[];document.querySelectorAll(".dz").forEach(z=>z.querySelectorAll(".mg").forEach(q=>ns.push({id:+q.dataset.id,period:z.dataset.sec})));
+    const was=GROUPS.flatMap(([k])=>S.habits.filter(y=>y.period===k).map(y=>y.id));
+    const moved=ns.filter(n=>S.habits.find(h=>h.id===n.id).period!==n.period);
+    if(!moved.length&&ns.every((n,i)=>n.id===was[i]))return;
+    try{
+      for(const n of moved){const h=S.habits.find(x=>x.id===n.id);
+        await api("POST","/api/habit/"+h.id,{name:h.name,description:h.description||"",emoji:h.emoji,color:h.color,period:n.period,days:h.days,goal:h.goal,unit:h.unit,kind:h.kind,end_date:h.end_date,repeat:h.repeat,wk:h.wk,mdays:h.mdays,intervals:h.intervals||[]})}
+      await api("POST","/api/habits/order",{ids:ns.map(n=>n.id)});
+    }catch(err){}
+    await refresh();
+  };
+  addEventListener("pointermove",mv);addEventListener("pointerup",end);addEventListener("pointercancel",end);
+  loop();
 }
 async function go(d){await ensureLogs(d);sel=d;render()}
 function confetti(el,col){
@@ -837,7 +875,7 @@ function viewStats(){
   const last30=days.filter(x=>x[0]>add(S.today,-30)),avg=last30.length?Math.round(100*last30.reduce((a,x)=>a+x[1]/x[2],0)/last30.length):0;
   let ps=0;for(let i=0;i<400;i++){const x=map[add(S.today,-i)];if(!x)continue;if(x[1]===x[2])ps++;else if(i>0)break}
   const checks=days.reduce((a,x)=>a+x[1],0),T=(k,c,v,l)=>`<div class="tile"><b>${ico({emoji:"ic:"+k,color:c})}${v}</b><span>${l}</span></div>`;
-  let h=topbar("Stats")+`<div class="tiles">${T("target","#1e90ff",avg+"%","30-day avg")}${T("flame","#ff8a3c",ps,"Streak")}${T("check","#2ecc71",perfect,"Perfect")}${T("trophy","#f5b700",checks,"Check-ins")}</div>`;
+  let h=topbar("Statistics")+`<div class="tiles">${T("target","#1e90ff",avg+"%","30-day avg")}${T("flame","#ff8a3c",ps,"Streak")}${T("check","#2ecc71",perfect,"Perfect")}${T("trophy","#f5b700",checks,"Check-ins")}</div>`;
   const wk=mon(S.today),fd=d=>dt(d).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});let bars="",lbl="";
   for(let i=11;i>=0;i--){
     const a=add(wk,-7*i),xs=[];for(let j=0;j<7;j++){const x=map[add(a,j)];if(x)xs.push(x[1]/x[2])}
