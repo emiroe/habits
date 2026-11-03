@@ -163,7 +163,7 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 .sheet .tile b{font-size:18px;display:flex;align-items:center;gap:5px}.sheet .tile b .ic{width:16px;height:16px;margin:0}.sheet .tile span{font-size:11px}
 .sheet{padding:14px 16px calc(18px + env(safe-area-inset-bottom))}.sheet h2{font-size:19px;margin-bottom:8px}.sheet h2 .x svg.i{width:16px;height:16px;stroke-width:2.4}.sheet h2 .x{display:flex;align-items:center;justify-content:center}
 .sheet .mh{margin:8px 0 6px;font-size:15px}.sheet .mh button{width:30px;height:30px;display:flex;align-items:center;justify-content:center}.sheet .mh svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6}
-.sheet .cal{column-gap:0;row-gap:3px;padding:8px;border-radius:16px}.sheet .cal .hd{font-size:10px;padding-bottom:2px}
+.sheet .cal{column-gap:0;row-gap:3px;padding:8px;border-radius:16px}.sheet .cal .hd{font-size:10px;padding-bottom:2px}.sheet .cal i{height:34px}
 .sheet .cal div.c{position:relative;height:34px;aspect-ratio:auto;border-radius:0;display:flex;align-items:center;justify-content:center;font-size:13px;background:none;box-shadow:none;border:0}
 .sheet .cal div.c b{position:relative;z-index:1;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 13px/1 -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .sheet .cal div.c.ok b{background:var(--hc);color:var(--hf)}.sheet .cal div.c.sk b{border:2px dashed var(--dim)}.sheet .cal div.c.miss b{background:var(--card2)}
@@ -510,6 +510,7 @@ function detailSheet(){
     const jn=ok&&wd>0&&okd(i-1)?" jl":"",jr=ok&&wd<6&&okd(i+1)?" jr":"";
     cal+=`<div class="c ${cls}${jn}${jr} ${d===S.today?"td":""}" data-day="${fu?"":d}"><b>${i}</b></div>`;
   }
+  cal+="<i></i>".repeat(Math.max(0,42-off-dim));
   const d=sel,l=lg(h,d),multi=h.goal>1||h.kind==="timer",st=h.kind==="timer"?5:1;
   ov.innerHTML=`<div class="sheet"><h2><span style="font-size:26px;display:flex">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl" aria-label="Close">${X}</button></h2>
   <div class="tiles"><div class="tile"><b>${ico({emoji:"ic:flame",color:"#ff8a3c"})}${h.streak}</b><span>Streak</span></div><div class="tile"><b>${ico({emoji:"ic:trophy",color:"#f5b700"})}${h.best}</b><span>Best</span></div>
