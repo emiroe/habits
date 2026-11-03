@@ -86,7 +86,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .mg .mv{display:flex;flex-direction:column;justify-content:center;padding:0 10px}
 .mg .mv button{color:var(--dim);font-size:15px;padding:4px 8px}
 /* tab bar */
-nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
+nav{will-change:transform;transform:translateZ(0);position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
 nav div{max-width:520px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px minmax(0,1fr) minmax(0,1fr);align-items:center}
 nav .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:300;color:#8c8c92;padding:2px 0}
 nav .tab{white-space:nowrap}
@@ -1017,6 +1017,10 @@ document.addEventListener("pointermove",e=>{if(e.pointerType!=="touch"||e.button
 document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("#rf");if(t){t.classList.add("spin");try{sessionStorage.setItem("hbNav",JSON.stringify({tab,per,sel}))}catch(e){}setTimeout(()=>location.reload(),250);return}
   if(e.target.closest&&e.target.closest("[data-cog]")){sheet=settingsSheet;render()}});
 load().catch(()=>{});
+const fixNav=()=>{const n=document.querySelector("nav");if(n){n.style.display="none";void n.offsetHeight;n.style.display=""}};   // iOS can leave the bottom bar mid-screen after a dialog or keyboard
+document.addEventListener("focusout",()=>setTimeout(fixNav,300));
+if(window.visualViewport)visualViewport.addEventListener("resize",()=>setTimeout(fixNav,100));
+window.addEventListener("pageshow",fixNav);
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){hiddenAt=Date.now();return}
   if(hiddenAt&&Date.now()-hiddenAt>20*60*1000&&per!=="all"&&per!==partNow()&&!document.querySelector(".pg")){per=partNow();if(S&&S.edit&&tab==="today")render()}   // back after a while: jump to the current part of the day
