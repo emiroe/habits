@@ -262,6 +262,10 @@ const mon=d=>add(d,-wcol(d));
 const inVac=d=>(S&&S.vac_periods||[]).some(q=>d>=q[0]&&(!q[1]||d<=q[1]));
 const hex=(c,a)=>c+Math.round(a*255).toString(16).padStart(2,"0");
 
+/* ---------- diagnostics (Settings > Diagnostics): errors and the last swipe, to find problems that only happen on the phone ---------- */
+const DBG={err:[],swipe:"none yet"};
+const dbgErr=m=>{DBG.err.unshift(new Date().toLocaleTimeString("en-GB")+" "+String(m).slice(0,160));DBG.err.length=Math.min(DBG.err.length,8)};
+window.addEventListener("error",e=>dbgErr(e.message+" @"+(e.lineno||"")));window.addEventListener("unhandledrejection",e=>dbgErr("promise: "+(e.reason&&e.reason.message||e.reason)));
 /* ---------- offline: check-offs are queued and sent when the connection is back ---------- */
 const QKEY="hbQ";let offline=false,flushing=false;
 const getQ=()=>{try{return JSON.parse(localStorage.getItem(QKEY)||"[]")}catch(e){return[]}};
@@ -475,18 +479,18 @@ let swiped=0;
 function bindSwipe(w){
   const row=w.querySelector(".h"),id=+w.dataset.id,TH=90;
   let x0=0,y0=0,dx=0,mode=0,pid=null;      // mode 0 = undecided, 1 = swiping, -1 = scrolling
-  row.addEventListener("pointerdown",e=>{if(e.button>0||sel>S.today)return;x0=e.clientX;y0=e.clientY;dx=0;mode=0;pid=e.pointerId;row.classList.remove("snap")});
+  row.addEventListener("pointerdown",e=>{DBG.swipe=`down ${e.pointerType} (sel ${sel}, today ${S.today}${e.button>0||sel>S.today?", ignored":""})`;if(e.button>0||sel>S.today)return;x0=e.clientX;y0=e.clientY;dx=0;mode=0;pid=e.pointerId;row.classList.remove("snap")});
   row.addEventListener("pointermove",e=>{
     if(e.pointerId!==pid)return;
     const ax=e.clientX-x0,ay=e.clientY-y0;
-    if(mode===0){if(Math.abs(ax)>10&&Math.abs(ax)>Math.abs(ay)*1.5){mode=1;try{row.setPointerCapture(pid)}catch(_){}}else if(Math.abs(ay)>10){mode=-1}}
+    if(mode===0){if(Math.abs(ax)>10&&Math.abs(ax)>Math.abs(ay)*1.5){mode=1;DBG.swipe+=" → swiping";try{row.setPointerCapture(pid)}catch(_){}}else if(Math.abs(ay)>10){mode=-1;DBG.swipe+=" → scrolling"}}
     if(mode!==1)return;
     dx=Math.max(-160,Math.min(160,ax));
     row.style.transform=`translateX(${dx}px)`;
     w.classList.toggle("sr",dx>0);w.classList.toggle("sl",dx<0);
   });
   const end=async e=>{
-    if(e.pointerId!==pid)return;pid=null;
+    if(e.pointerId!==pid)return;pid=null;DBG.swipe+=` → ${e.type} dx ${Math.round(dx)}`;
     if(mode!==1)return;
     swiped=Date.now();
     row.classList.add("snap");row.style.transform="";w.classList.remove("sr","sl");
@@ -974,6 +978,8 @@ function timerSheet(){
   };
   $("#tm").onclick=()=>adjust(done-5);$("#tpl").onclick=()=>adjust(done+5);
 }
+function diagHtml(){
+  return `<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>Diagnostics</h2><div class="sg" style="padding:14px;font-size:13px;line-height:1.6;font-weight:300;word-break:break-word"><b>Online:</b> ${navigator.onLine?"yes":"no"} · <b>Server:</b> ${offline?"not reachable":"ok"}<br><b>Service worker:</b> ${navigator.serviceWorker&&navigator.serviceWorker.controller?"active":"none"}<br><b>Queue:</b> ${getQ().length}<br><b>Today:</b> ${S.today}<br><b>Last swipe:</b> ${esc(DBG.swipe)}<br><b>Errors:</b><br>${DBG.err.length?DBG.err.map(esc).join("<br>"):"none"}</div>`}
 let setPg="main";
 function settingsSheet(){
   let dirty=false,pushOn=false,pushMsg="";const ov=document.createElement("div");ov.className="ov";document.body.appendChild(ov);
@@ -994,13 +1000,14 @@ function settingsSheet(){
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${tg2("sounds","snd","Sounds")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}${hasPin()?row("pinchg","lock","Change passcode"):""}</div>
-      <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("export","tool","Export Data")}</div>
+      <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("diag","note","Diagnostics")}</div><div class="sg">${row("export","tool","Export Data")}</div>
       <div class="sg">${row("pw","lock","Change password")}<button class="srw" id="lo" style="color:#ff5c5c"><span>Sign out</span></button></div></div>`;
       $("#cl").onclick=close;
       $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});localStorage.removeItem(QKEY);if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage("clear");close();S={edit:false};render()};
     }else{
       const P={tod:pick("Time of day",[["Morning ends at","mEnd",[10,11,12,13].map(n=>[n,hh(n)])],["Evening starts at","eStart",[16,17,18,19,20].map(n=>[n,hh(n)])]]),
         wk:pick("Start week on",[["","wk",["Monday","Sunday"].map(x=>[x,x])]],S.week_start===6?"Sunday":"Monday"),units:pick("Units of Measure",[["","units",[["metric","Metric"],["imperial","Imperial"]]]]),slate:`<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>Clean Slate Protocol</h2><p style="color:#8c8c92;font-weight:300;margin:6px 4px 16px;line-height:1.45">This permanently deletes <b style="color:#fff;font-weight:600">all your habits and all their history</b>: streaks, check-ins and statistics. Your password and settings stay. This cannot be undone.</p><button class="btn red" id="s1">Continue</button>`,
+        diag:diagHtml(),
         slate2:`<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>Are you sure?</h2><p style="color:#8c8c92;font-weight:300;margin:6px 4px 12px;line-height:1.45">Last step. Type <b style="color:#fff;font-weight:600">CLEAN</b> to erase everything.</p><input class="t" id="cf" autocomplete="off" autocapitalize="characters" placeholder="CLEAN"><div class="err" id="er"></div><button class="btn red" id="s2" disabled style="opacity:.4">Delete everything</button>`,
         pw:`<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>Change password</h2><input class="t" id="cu" type="password" placeholder="Current password" autocomplete="current-password" style="margin-bottom:8px"><input class="t" id="nw" type="password" placeholder="New password (min 8 characters)" autocomplete="new-password"><div class="err" id="er"></div><button class="btn" id="cp">Change password</button>`,
         export:"",tone:pick("Notification tone",[["","tone",[["Default","Default"]]]])};
