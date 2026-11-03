@@ -1,4 +1,4 @@
-import os, json, hmac, hashlib, time, datetime
+import os, json, hmac, hashlib, time, datetime, asyncio, base64
 from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from psycopg_pool import ConnectionPool
@@ -25,10 +25,13 @@ ALTER TABLE habits ADD COLUMN IF NOT EXISTS end_date date;                      
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'daily';  -- daily (weekdays) | weekly (wk days per week) | monthly (mdays) | once
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS wk int NOT NULL DEFAULT 1;
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS mdays text NOT NULL DEFAULT '';          -- monthly: comma separated dates, e.g. '1,15'
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS remind text NOT NULL DEFAULT '';           -- reminder time 'HH:MM' (push notification), empty = none
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS intervals text NOT NULL DEFAULT '';      -- timer: JSON [{"m":25,"t":"f"},{"m":5,"t":"s"}] f=focus s=short break l=long break
 CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
   count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
 CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value text NOT NULL);
+CREATE TABLE IF NOT EXISTS push_subs (endpoint text PRIMARY KEY, p256dh text NOT NULL, auth text NOT NULL);
+CREATE TABLE IF NOT EXISTS push_sent (key text PRIMARY KEY, day date NOT NULL);
 """
 PERIODS = ("morning", "afternoon", "evening", "anytime")
 LOG_DAYS = 90      # /api/state carries this many days of logs; older ones come from /api/logs
@@ -37,7 +40,9 @@ LOG_DAYS = 90      # /api/state carries this many days of logs; older ones come 
 async def lifespan(app):
     pool.open(wait=True)
     with pool.connection() as c: c.execute(SCHEMA)
+    task = asyncio.create_task(push_loop())
     yield
+    task.cancel()
     pool.close()
 
 app = FastAPI(lifespan=lifespan)
@@ -76,6 +81,7 @@ class HabitIn(BaseModel):
     name: str; emoji: str = "✅"; color: str = "#6c5ce7"; period: str = "anytime"; days: str = "0123456"; goal: int = 1; unit: str = ""
     description: str = ""; kind: str = "units"; end_date: str | None = None
     repeat: str = "daily"; wk: int = 1; mdays: str = ""; intervals: list[dict] = []
+    remind: str | None = None          # 'HH:MM', '' = off, None = leave unchanged (updates only)
 class LogIn(BaseModel):
     habit_id: int; day: str; count: int | None = None; skipped: bool | None = None
 class Order(BaseModel): ids: list[int]
@@ -172,11 +178,14 @@ def prefs(c):
     r = dict(c.execute("SELECT key,value FROM settings WHERE key IN ('vac','week_start')").fetchall())
     vac = [(parse_day(a), parse_day(b) if b else None) for a, b in json.loads(r.get("vac", "[]"))]
     return vac, int(r.get("week_start", 0))
+def push_prefs(c):
+    r = dict(c.execute("SELECT key,value FROM settings WHERE key IN ('nudge','m_end','e_start')").fetchall())
+    return {"nudge": r.get("nudge", "0") == "1", "m_end": int(r.get("m_end", 12)), "e_start": int(r.get("e_start", 18))}
 
 def load(c, only_active_ids=None):
     habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9],
-               "description": r[10], "kind": r[11], "end_date": r[12], "repeat": r[13], "wk": r[14], "mdays": r[15], "intervals": json.loads(r[16]) if r[16] else []}
-              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals FROM habits ORDER BY position,id").fetchall()]
+               "description": r[10], "kind": r[11], "end_date": r[12], "repeat": r[13], "wk": r[14], "mdays": r[15], "intervals": json.loads(r[16]) if r[16] else [], "remind": r[17]}
+              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind FROM habits ORDER BY position,id").fetchall()]
     logs = {}
     for hid, day, cnt, sk in c.execute("SELECT habit_id,day,count,skipped FROM logs").fetchall(): logs.setdefault(hid, {})[day] = (cnt, sk)
     return habits, logs
@@ -185,7 +194,7 @@ def load(c, only_active_ids=None):
 def state(req: Request):
     if not authed(req): return {"edit": False}
     t = today()
-    with pool.connection() as c: habits, logs = load(c); vac, ws = prefs(c)
+    with pool.connection() as c: habits, logs = load(c); vac, ws = prefs(c); pp = push_prefs(c)
     lo = t - datetime.timedelta(days=LOG_DAYS)
     out = []
     for h in habits:
@@ -193,11 +202,14 @@ def state(req: Request):
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
     return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 400, vac), "vac": in_vac(t, vac),
-            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws}
+            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, **pp, "push_key": vapid()[1]}
 
 class PrefsIn(BaseModel):
     vacation: bool | None = None
     week_start: int | None = None
+    nudge: bool | None = None
+    m_end: int | None = None
+    e_start: int | None = None
 
 @app.post("/api/prefs")
 def prefs_set(b: PrefsIn, req: Request):
@@ -217,6 +229,10 @@ def prefs_set(b: PrefsIn, req: Request):
             c.execute("INSERT INTO settings VALUES ('vac',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (js,))
         if b.week_start is not None:
             c.execute("INSERT INTO settings VALUES ('week_start',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (str(b.week_start),))
+        for k, v in (("nudge", None if b.nudge is None else "1" if b.nudge else "0"), ("m_end", b.m_end), ("e_start", b.e_start)):
+            if v is None: continue
+            if k == "m_end" and not 9 <= int(v) <= 14 or k == "e_start" and not 15 <= int(v) <= 21: raise HTTPException(400, "bad time of day")
+            c.execute("INSERT INTO settings VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (k, str(v)))
     return {"ok": True}
 
 class CleanIn(BaseModel): confirm: str
@@ -229,6 +245,104 @@ def clean_slate(b: CleanIn, req: Request):
     with pool.connection() as c:
         c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits"); c.execute("DELETE FROM settings WHERE key='vac'")
     return {"ok": True}
+
+# ---- push notifications (Web Push, works for the app on the iPhone Home Screen) ----
+def vapid():
+    """(Vapid object, public key as urlsafe base64). The key pair is created once and kept in settings."""
+    from py_vapid import Vapid
+    from cryptography.hazmat.primitives import serialization as ser
+    with pool.connection() as c:
+        r = dict(c.execute("SELECT key,value FROM settings WHERE key IN ('vapid_priv','vapid_pub')").fetchall())
+        if "vapid_priv" not in r:
+            v = Vapid(); v.generate_keys()
+            r["vapid_priv"] = base64.urlsafe_b64encode(v.private_key.private_numbers().private_value.to_bytes(32, "big")).decode().rstrip("=")
+            r["vapid_pub"] = base64.urlsafe_b64encode(v.public_key.public_bytes(ser.Encoding.X962, ser.PublicFormat.UncompressedPoint)).decode().rstrip("=")
+            for k in ("vapid_priv", "vapid_pub"): c.execute("INSERT INTO settings VALUES (%s,%s) ON CONFLICT (key) DO NOTHING", (k, r[k]))
+    return Vapid.from_raw(r["vapid_priv"].encode()), r["vapid_pub"]
+
+def push_all(title, body, badge=0, tag=None):
+    """Send to every subscribed device; dead subscriptions are removed. Returns how many were sent."""
+    from pywebpush import webpush, WebPushException
+    v = vapid()[0]
+    with pool.connection() as c: subs = c.execute("SELECT endpoint,p256dh,auth FROM push_subs").fetchall()
+    sent = 0
+    for ep, p, a in subs:
+        try:
+            webpush({"endpoint": ep, "keys": {"p256dh": p, "auth": a}}, json.dumps({"title": title, "body": body, "badge": badge, "tag": tag}),
+                    vapid_private_key=v, vapid_claims={"sub": "mailto:admin@romijn.app"}, ttl=3600)
+            sent += 1
+        except WebPushException as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code in (404, 410):
+                with pool.connection() as c: c.execute("DELETE FROM push_subs WHERE endpoint=%s", (ep,))
+        except Exception: pass
+    return sent
+
+def open_habits(habits, logs, t, vac, ws, parts):
+    """Habits still to do today in the given parts of the day."""
+    if in_vac(t, vac): return []
+    out = []
+    mon = t - datetime.timedelta(days=(t.weekday() - ws) % 7)
+    for h in habits:
+        if h["period"] not in parts or not sched(h, t) or t < h["created"]: continue
+        l = logs.get(h["id"], {}).get(t)
+        if (l and l[1]) or is_done(h, l): continue
+        if h["repeat"] == "weekly" and sum(is_done(h, logs.get(h["id"], {}).get(mon + datetime.timedelta(days=i))) for i in range(7)) >= h["wk"]: continue
+        out.append(h)
+    return out
+
+def push_tick(now=None):
+    now = now or datetime.datetime.now(TZ); t = now.date(); hm = now.strftime("%H:%M")
+    with pool.connection() as c:
+        if not c.execute("SELECT 1 FROM push_subs LIMIT 1").fetchone(): return
+        habits, logs = load(c); vac, ws = prefs(c); pp = push_prefs(c)
+        sent = {r[0] for r in c.execute("SELECT key FROM push_sent WHERE day=%s", (t,)).fetchall()}
+        c.execute("DELETE FROM push_sent WHERE day < %s", (t - datetime.timedelta(days=2),))
+    def due(at):   # from the set time until 3 hours later (a restart or a late phone still delivers it)
+        return at <= hm and now - datetime.datetime.combine(t, datetime.time(int(at[:2]), int(at[3:])), TZ) < datetime.timedelta(hours=3)
+    def mark(k):
+        with pool.connection() as c: c.execute("INSERT INTO push_sent VALUES (%s,%s) ON CONFLICT DO NOTHING", (k, t))
+    cur = "morning" if now.hour < pp["m_end"] else "afternoon" if now.hour < pp["e_start"] else "evening"
+    badge = len(open_habits(habits, logs, t, vac, ws, (cur, "anytime")))
+    for h in open_habits(habits, logs, t, vac, ws, PERIODS):
+        k = "r%d" % h["id"]
+        if h["remind"] and k not in sent and due(h["remind"]):
+            mark(k); push_all(h["name"], "Time for %s · %d %s" % (h["name"], h["goal"], h["unit"] or "times") if h["kind"] != "timer" else "Time for %s · %d min" % (h["name"], h["goal"]), badge, k)
+    if pp["nudge"]:
+        for part, at in (("morning", "08:00"), ("afternoon", "%02d:00" % pp["m_end"]), ("evening", "%02d:00" % pp["e_start"])):
+            k = "n" + part
+            if k in sent or not due(at): continue
+            mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime"))
+            if hs: push_all("%s · %d to do" % (part.capitalize(), len(hs)), ", ".join(h["name"] for h in hs[:6]) + (" …" if len(hs) > 6 else ""), len(hs), k)
+
+async def push_loop():
+    while True:
+        try: await asyncio.to_thread(push_tick)
+        except Exception as e: print("push error", e)
+        await asyncio.sleep(30)
+
+class SubIn(BaseModel): endpoint: str; p256dh: str; auth: str
+class EpIn(BaseModel): endpoint: str
+
+@app.post("/api/push/subscribe")
+def push_subscribe(b: SubIn, req: Request):
+    need_auth(req)
+    with pool.connection() as c: c.execute("INSERT INTO push_subs VALUES (%s,%s,%s) ON CONFLICT (endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth", (b.endpoint, b.p256dh, b.auth))
+    return {"ok": True}
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(b: EpIn, req: Request):
+    need_auth(req)
+    with pool.connection() as c: c.execute("DELETE FROM push_subs WHERE endpoint=%s", (b.endpoint,))
+    return {"ok": True}
+
+@app.post("/api/push/test")
+def push_test(req: Request):
+    need_auth(req)
+    return {"sent": push_all("Habits", "Notifications are working.", 0, "test")}
+
+@app.get("/sw.js")
+def sw(): return FileResponse("static/sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 @app.get("/api/logs")
 def logs_range(req: Request, start: str, end: str, habit_id: int | None = None):
@@ -267,6 +381,9 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
+    if b.remind:
+        try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
+        except Exception: raise HTTPException(400, "bad reminder time")
     b.description = b.description.strip()
     if len(b.description) > 500: raise HTTPException(400, "description is too long")
     if len(b.unit) > 20 or not (b.emoji.strip() and len(b.emoji) <= 16): raise HTTPException(400, "bad emoji or unit")
@@ -279,16 +396,16 @@ def habit_add(b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
         pos = c.execute("SELECT coalesce(max(position),0)+1 FROM habits").fetchone()[0]
-        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "")).fetchone()[0]
+        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind or "")).fetchone()[0]
     return {"id": i}
 
 @app.post("/api/habit/{hid}")
 def habit_update(hid: int, b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
-        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s,repeat=%s,wk=%s,mdays=%s,intervals=%s WHERE id=%s",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", hid)).rowcount
+        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s,repeat=%s,wk=%s,mdays=%s,intervals=%s,remind=coalesce(%s,remind) WHERE id=%s",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind, hid)).rowcount
     if not n: raise HTTPException(404, "no such habit")
     return {"ok": True}
 

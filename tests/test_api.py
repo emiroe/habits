@@ -156,3 +156,19 @@ def test_clean_slate(c):
     assert len(c.get("/api/state").json()["habits"]) >= 1
     assert c.post("/api/clean-slate", json={"confirm": "CLEAN"}).status_code == 200
     s = c.get("/api/state").json(); assert s["habits"] == [] and s["days"] == []
+
+def test_push_basics(c):
+    s = c.get("/api/state").json(); assert len(s["push_key"]) > 60
+    assert c.post("/api/push/subscribe", json={"endpoint": "https://example.invalid/x", "p256dh": "a", "auth": "b"}).status_code == 200
+    r = c.post("/api/habit", json={"name": "R", "remind": "07:30"}); assert r.status_code == 200
+    hid = r.json()["id"]
+    assert c.post("/api/habit", json={"name": "bad", "remind": "7:3"}).status_code == 400
+    assert [h for h in c.get("/api/state").json()["habits"] if h["id"] == hid][0]["remind"] == "07:30"
+    c.post("/api/habit/%d" % hid, json={"name": "R2"})                                   # remind omitted = unchanged
+    assert [h for h in c.get("/api/state").json()["habits"] if h["id"] == hid][0]["remind"] == "07:30"
+    c.post("/api/habit/%d" % hid, json={"name": "R2", "remind": ""})
+    assert [h for h in c.get("/api/state").json()["habits"] if h["id"] == hid][0]["remind"] == ""
+    assert c.post("/api/prefs", json={"nudge": True, "m_end": 13}).status_code == 200
+    s = c.get("/api/state").json(); assert s["nudge"] is True and s["m_end"] == 13
+    assert c.post("/api/prefs", json={"m_end": 20}).status_code == 400
+    main.push_tick()           # no crash; the fake subscription fails silently

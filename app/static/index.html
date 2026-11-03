@@ -95,7 +95,7 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 
 /* top bar extras */
 .achs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:0 0 8px}.achs+.grp,.top+.tiles+.grp{margin-top:6px}.ach .bd{width:38px!important;height:38px!important;margin-bottom:2px!important}.ach .bd svg{width:20px!important;height:20px!important}.ach b{font-size:11px!important}.ach{text-align:center;opacity:.45}.ach.on{opacity:1}.ach .bd{width:54px;height:54px;border-radius:50%;background:var(--card);margin:0 auto 4px;display:grid;place-items:center}.ach .bd svg{width:26px;height:26px}.ach b{font-size:13px}
-.sheet.big{max-height:92vh;overflow:auto;background:#262628}.sheet.big h2{text-align:center;position:relative;margin:2px 0 14px}.sheet.big h2 .x,.sheet.big h2 .bk{position:absolute;left:0;top:0}.sheet.big h2 .x{left:auto;right:0}
+.sheet.big{height:100%;max-height:none;border-radius:0;overflow:auto;background:#262628;padding-top:calc(16px + env(safe-area-inset-top))}.sheet.big h2{text-align:center;position:relative;margin:2px 0 14px}.sheet.big h2 .x,.sheet.big h2 .bk{position:absolute;left:0;top:0}.sheet.big h2 .x{left:auto;right:0}
 .sheet.big h2.sh{display:flex;align-items:center;justify-content:center;padding:0 36px;min-height:32px;text-align:center}.sheet.big h2.sh .bk{width:32px;height:32px;align-items:center;justify-content:flex-start}.sh .bk{display:flex}.sh .bk svg{width:22px;height:22px}.sg{background:#333335;border-radius:18px;margin:0 0 12px;overflow:hidden}.sc{margin:0 0 12px}.sc .sg,.sc .srw{border-radius:18px}.sc .srw{background:#333335}.sc p{margin:6px 6px 0;color:#8c8c92;font-size:12.500px;font-weight:300}
 .srw{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;font-size:17px;text-align:left}.sg .srw+.srw{border-top:1px solid #3d3d40}.srw .si{width:24px;height:24px;flex:none}.srw span{flex:1}.srw em{font-style:normal;color:#8c8c92;font-size:15px}.srw .chv{width:16px;height:16px;color:#8c8c92}.ck{color:var(--ac)}
 .swt{width:50px;height:30px;border-radius:15px;background:#48484c;position:relative;flex:none;transition:background .2s}.swt::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s}.swt.on{background:#1e90ff}.swt.on::after{transform:translateX(20px)}
@@ -522,6 +522,20 @@ function confetti(el,col){
     document.body.appendChild(s);setTimeout(()=>s.remove(),750);
   }
 }
+/* ---------- push notifications ---------- */
+const b64u=k=>{const p="=".repeat((4-k.length%4)%4),b=atob((k+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))};
+const b64e=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const pushOK=()=>"serviceWorker" in navigator&&"PushManager" in window&&"Notification" in window;
+if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
+async function pushSub(){if(!pushOK())return null;const r=await navigator.serviceWorker.ready;return r.pushManager.getSubscription()}
+async function pushEnable(){   // asks permission (must come from a tap), subscribes and tells the server
+  if(!pushOK())throw new Error("Add the app to your Home Screen first");
+  if(Notification.permission==="default")await Notification.requestPermission();
+  if(Notification.permission!=="granted")throw new Error("Notifications are blocked in iOS Settings");
+  const r=await navigator.serviceWorker.ready;let sub=await r.pushManager.getSubscription();
+  if(!sub)sub=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(S.push_key)});
+  const j=sub.toJSON();await api("POST","/api/push/subscribe",{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth});return true}
+async function pushDisable(){const sub=await pushSub();if(sub){await api("POST","/api/push/unsubscribe",{endpoint:sub.endpoint});await sub.unsubscribe()}}
 let AC=null;
 function ding(){   // soft two-note chime when a habit is finished (Settings > Sounds)
   if(!PF_.sounds)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume();
@@ -785,12 +799,12 @@ function editPage(h,tpl,fromPicker){
     :{name:t.name||"",description:"",emoji:t.emoji||"ic:check",color:t.color||"#1e90ff",period:t.period||"anytime",days:"0123456",goal:t.goal||1,unit:t.unit||"",kind:t.kind||"units",end_date:null,goalOn:true};
   f.repOn=!h||h.repeat!=="once";f.mode=h&&h.repeat&&h.repeat!=="once"?h.repeat:"daily";f.wk=f.wk||1;f.mdays=f.mdays||"";
   f.iv=h&&h.intervals&&h.intervals.length?h.intervals.map(x=>({...x})):(f.kind==="timer"?(/pomodoro/i.test(f.name)?POM():[{m:f.goal>=1?f.goal:25,t:"f"}]):[]);
-  const ui={pick:null,rep:true,tod:false,end:!!f.end_date};
+  const ui={pick:null,rep:true,tod:false,end:!!f.end_date,rem:!!f.remind};
   const el=document.createElement("div");el.className="pg";
   el.innerHTML=`<div class="pgbar"><button class="pb" id="bk" aria-label="Back">${fromPicker?BACK:X}</button><b>Habit</b><button class="save" id="sv">Save</button></div><div class="pgbody" id="pb"></div>`;
   const body=el.querySelector("#pb");
   const sync=()=>{const g=i=>body.querySelector(i);
-    if(g("#nm"))f.name=g("#nm").value;if(g("#ds"))f.description=g("#ds").value;if(g("#ed"))f.end_date=g("#ed").value||null};
+    if(g("#nm"))f.name=g("#nm").value;if(g("#ds"))f.description=g("#ds").value;if(g("#ed"))f.end_date=g("#ed").value||null;if(g("#rt"))f.remind=g("#rt").value||"09:00"};
   const view=()=>({repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,days:f.days});
   const draw=()=>{
     const keep=el.scrollTop,tod=f.period==="anytime"?"Any time of the day":PER[f.period][0];
@@ -814,6 +828,8 @@ function editPage(h,tpl,fromPicker){
       ${f.kind==="timer"?ivHtml:`<button class="gl" data-gl="1"><span>${esc(goalText(f))}</span>${CHR}</button>`}`:""}</div>
     <div class="cd"><button class="rw" data-tgl="tod"><span>${tod}</span>${CH}</button>
       ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button></div>`:""}</div>
+    <div class="cd"><div class="rw"><span>Remind me at</span><button class="tg ${ui.rem?"on":""}" data-tg="rem" role="switch" aria-checked="${ui.rem}" aria-label="Remind me"></button></div>
+      ${ui.rem?`<div class="hl"></div><div class="rw"><span>Time</span><input class="dt" type="time" id="rt" value="${f.remind||"09:00"}"></div>`:""}</div>
     <div class="err" id="er"></div>${h?`<button class="del" id="del">Delete habit</button>`:""}`;
     el.scrollTop=keep;
   };
@@ -823,6 +839,7 @@ function editPage(h,tpl,fromPicker){
     else if(d.e){f.emoji=d.e;ui.pick=null;draw()}
     else if(d.c){f.color=d.c;ui.pick=null;draw()}
     else if(d.tgl){ui[d.tgl]=!ui[d.tgl];draw()}
+    else if(d.tg==="rem"){ui.rem=!ui.rem;if(ui.rem&&!f.remind)f.remind="09:00";draw();if(ui.rem)pushEnable().catch(()=>{})}
     else if(d.tg==="rep"){f.repOn=!f.repOn;draw()}
     else if(d.tg==="end"){ui.end=!ui.end;if(!ui.end)f.end_date=null;draw()}
     else if(d.tg==="goal"){f.goalOn=!f.goalOn;draw()}
@@ -856,7 +873,7 @@ function editPage(h,tpl,fromPicker){
     if(kind==="timer"&&!f.iv.some(x=>x.t==="f"))return er("Add at least one focus interval");
     const goal=kind==="timer"?Math.min(1440,ivGoal(f.iv)):(f.goalOn?f.goal:1);
     try{await api("POST",h?"/api/habit/"+h.id:"/api/habit",{name:f.name,description:f.description,emoji:f.emoji,color:f.color,period:f.period,days:f.days||"0123456",goal,
-      unit:kind==="timer"?"min":(f.goalOn?f.unit:""),kind,end_date:ui.end?f.end_date:null,repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,intervals:kind==="timer"?f.iv:[]});closePage(true);await refresh()}
+      unit:kind==="timer"?"min":(f.goalOn?f.unit:""),kind,end_date:ui.end?f.end_date:null,repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,intervals:kind==="timer"?f.iv:[],remind:ui.rem?f.remind||"09:00":""});closePage(true);await refresh()}
     catch(e){er(e.message)}
   };
   draw();openPage(el);
@@ -888,13 +905,13 @@ function timerSheet(){
 }
 let setPg="main";
 function settingsSheet(){
-  let dirty=false;const ov=document.createElement("div");ov.className="ov";document.body.appendChild(ov);
+  let dirty=false,pushOn=false,pushMsg="";const ov=document.createElement("div");ov.className="ov";document.body.appendChild(ov);
   const close=()=>{sheet=null;setPg="main";ov.remove();if(dirty)render()};ov.onclick=e=>{if(e.target===ov)close()};
   const ic=(c,d)=>`<svg class="si" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-  const SI={sun:ic("#f5b700",'<circle cx="12" cy="12" r="4"/><path d="M12 2.500v2.500M12 19v2.500M2.500 12H5M19 12h2.500M5.300 5.300l1.800 1.800M16.900 16.900l1.800 1.800M5.300 18.700l1.800-1.800M16.900 7.100l1.800-1.800"/>'),cal:ic("#ff6a45",'<rect x="3.500" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.500 11h17"/>'),badge:ic("#2ecc71",'<path d="M13 4H8a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-5"/><circle cx="18" cy="6" r="3"/>'),min:ic("#1e90ff",'<rect x="3.500" y="3.500" width="17" height="17" rx="3"/><path d="M8 8l8 8M16 8l-8 8"/>'),book:ic("#ff6a45",'<path d="M4 5.500C7 4.500 10 5 12 7c2-2 5-2.500 8-1.500V18c-3-1-6-.5-8 1.500C10 17.500 7 17 4 18z"/><path d="M12 7v12.500"/>'),umb:ic("#f5b700",'<path d="M3.500 12a8.500 8.500 0 0 1 17 0zM12 12l-4 8"/>'),ruler:ic("#ff6a45",'<rect x="2.500" y="8" width="19" height="8" rx="2" transform="rotate(-35 12 12)"/><path d="M8 13l1.500-1.200M11 11l1.500-1.200M14 9l1.500-1.200"/>'),snd:ic("#8a4dff",'<path d="M4 9.500v5h3.500L12 18.500v-13L7.500 9.500zM15.500 9a4 4 0 0 1 0 6"/>'),sug:ic("#2ecc71",'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h8"/>'),lock:ic("#ff3b6b",'<rect x="5" y="10.500" width="14" height="10" rx="3"/><path d="M8 10.500V8a4 4 0 0 1 8 0v2.500"/>'),slate:ic("#ff3b6b",'<path d="M5 7h9M9 4h2M7 7v11a2 2 0 0 0 2 2h2"/><circle cx="17" cy="17" r="4"/><path d="M17 15v2l1.500 1"/>'),tool:ic("#8a4dff",'<path d="M14.500 6.500a4 4 0 0 0 4.800 4.800L12 18.600a2.100 2.100 0 0 1-3-3z"/><path d="M14.500 6.500l2-2"/>'),note:ic("#1e90ff",'<path d="M9 18V6l10-2v12"/><circle cx="6.500" cy="18" r="2.500"/><circle cx="16.500" cy="16" r="2.500"/>')};
+  const SI={bell:ic("#ff6a45",'<path d="M6 9a6 6 0 0 1 12 0c0 6 2.500 7.500 2.500 7.500h-17S6 15 6 9zM10 20a2.200 2.200 0 0 0 4 0"/>'),sun:ic("#f5b700",'<circle cx="12" cy="12" r="4"/><path d="M12 2.500v2.500M12 19v2.500M2.500 12H5M19 12h2.500M5.300 5.300l1.800 1.800M16.900 16.900l1.800 1.800M5.300 18.700l1.800-1.800M16.900 7.100l1.800-1.800"/>'),cal:ic("#ff6a45",'<rect x="3.500" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.500 11h17"/>'),badge:ic("#2ecc71",'<path d="M13 4H8a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-5"/><circle cx="18" cy="6" r="3"/>'),min:ic("#1e90ff",'<rect x="3.500" y="3.500" width="17" height="17" rx="3"/><path d="M8 8l8 8M16 8l-8 8"/>'),book:ic("#ff6a45",'<path d="M4 5.500C7 4.500 10 5 12 7c2-2 5-2.500 8-1.500V18c-3-1-6-.5-8 1.500C10 17.500 7 17 4 18z"/><path d="M12 7v12.500"/>'),umb:ic("#f5b700",'<path d="M3.500 12a8.500 8.500 0 0 1 17 0zM12 12l-4 8"/>'),ruler:ic("#ff6a45",'<rect x="2.500" y="8" width="19" height="8" rx="2" transform="rotate(-35 12 12)"/><path d="M8 13l1.500-1.200M11 11l1.500-1.200M14 9l1.500-1.200"/>'),snd:ic("#8a4dff",'<path d="M4 9.500v5h3.500L12 18.500v-13L7.500 9.500zM15.500 9a4 4 0 0 1 0 6"/>'),sug:ic("#2ecc71",'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 10h8M8 14h8"/>'),lock:ic("#ff3b6b",'<rect x="5" y="10.500" width="14" height="10" rx="3"/><path d="M8 10.500V8a4 4 0 0 1 8 0v2.500"/>'),slate:ic("#ff3b6b",'<path d="M5 7h9M9 4h2M7 7v11a2 2 0 0 0 2 2h2"/><circle cx="17" cy="17" r="4"/><path d="M17 15v2l1.500 1"/>'),tool:ic("#8a4dff",'<path d="M14.500 6.500a4 4 0 0 0 4.800 4.800L12 18.600a2.100 2.100 0 0 1-3-3z"/><path d="M14.500 6.500l2-2"/>'),note:ic("#1e90ff",'<path d="M9 18V6l10-2v12"/><circle cx="6.500" cy="18" r="2.500"/><circle cx="16.500" cy="16" r="2.500"/>')};
   const chev='<svg class="chv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
   const row=(k,i,l,v)=>`<button class="srw" data-go="${k}">${SI[i]}<span>${l}</span>${v?`<em>${v}</em>`:""}${chev}</button>`;
-  const tg=(k,i,l,d)=>`<div class="sc"><div class="srw trw" data-t2="${k}">${SI[i]}<span>${l}</span><i class="swt ${(k==="vac"?S.vac:PF_[k])?"on":""}"></i></div><p>${d}</p></div>`;
+  const tg=(k,i,l,d)=>`<div class="sc"><div class="srw trw" data-t2="${k}">${SI[i]}<span>${l}</span><i class="swt ${(k==="vac"?S.vac:k==="push"?pushOn:k==="nudge"?S.nudge:PF_[k])?"on":""}"></i></div><p>${d}</p></div>`;
   const tg2=(k,i,l)=>`<div class="srw trw" data-t2="${k}">${SI[i]}<span>${l}</span><i class="swt ${PF_[k]?"on":""}"></i></div>`;
   const hh=n=>String(n).padStart(2,"0")+":00";
   const pick=(title,groups,cur)=>`<h2 class="sh"><button class="bk" id="bk" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>${title}</h2>`+groups.map(([lb,key,opts])=>`${lb?`<div class="grp" style="text-align:left;margin:12px 4px 6px">${lb}</div>`:""}<div class="sg">${opts.map(([v,t])=>`<button class="srw" data-set="${key}" data-v="${v}"><span>${t}</span>${String(cur||PF_[key])===String(v)?'<b class="ck">✓</b>':""}</button>`).join("")}</div>`).join("");
@@ -902,6 +919,9 @@ function settingsSheet(){
     if(setPg==="main"){
       ov.innerHTML=`<div class="sheet big"><h2>General<button class="x" id="cl">✕</button></h2>
       <div class="sg">${row("tod","sun","Time of day")}${row("wk","cal","Start week on",S.week_start===6?"Sunday":"Monday")}</div>
+      ${tg("push","bell","Notifications","Reminders and updates from this app. Needs the app on your Home Screen.")}
+      ${tg("nudge","bell","Part-of-day nudges","A reminder at the start of morning, afternoon and evening listing what is still open.")}
+      <div class="sg">${row("ptest","bell","Send a test notification")}</div><p id="pm" style="margin:-4px 6px 12px;color:#8c8c92;font-size:12.500px;font-weight:300">${esc(pushMsg)}</p>
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
@@ -923,16 +943,19 @@ function settingsSheet(){
       if($("#cp"))$("#cp").onclick=async()=>{try{await api("POST","/api/password",{current:$("#cu").value,new:$("#nw").value});$("#er").style.color="#2ecc71";$("#er").textContent="Password changed"}catch(e){$("#er").style.color="";$("#er").textContent=e.message}};
       ov.querySelectorAll("[data-set]").forEach(b=>b.onclick=()=>{const k=b.dataset.set,v=b.dataset.v;
         if(k==="wk"){setPg="main";api("POST","/api/prefs",{week_start:v==="Sunday"?6:0}).then(()=>syncState()).then(()=>{dirty=true;draw()}).catch(()=>{});return}
-        PF_[k]=/^\d+$/.test(v)?+v:v;savePref();dirty=true;setPg="main";draw()});
+        PF_[k]=/^\d+$/.test(v)?+v:v;savePref();dirty=true;setPg="main";draw();if(k==="mEnd"||k==="eStart")api("POST","/api/prefs",k==="mEnd"?{m_end:PF_.mEnd}:{e_start:PF_.eStart}).then(()=>syncState()).catch(()=>{})});
       return;
     }
-    ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
+    ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="ptest"){pushMsg="Sending…";draw();api("POST","/api/push/test").then(r=>{pushMsg=r.sent?"Sent. It should arrive in a moment.":"No device is subscribed yet: turn on Notifications first.";draw()}).catch(e=>{pushMsg=e.message;draw()});return}if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
     ov.querySelectorAll("[data-t2]").forEach(b=>b.onclick=()=>{const k=b.dataset.t2;
+      if(k==="push"){const was=pushOn;pushMsg="";(was?pushDisable():pushEnable()).then(()=>{pushOn=!was;draw()}).catch(e=>{pushMsg=e.message;draw()});return}
+      if(k==="nudge"){const on=!S.nudge;S.nudge=on;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{nudge:on}).then(()=>{if(on&&!pushOn)pushEnable().then(()=>{pushOn=true;draw()}).catch(e=>{pushMsg=e.message;draw()})}).catch(()=>{});return}
       if(k==="vac"){const on=!S.vac;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{vacation:on}).then(()=>syncState()).then(()=>{dirty=true}).catch(()=>{});return}
       if(k==="badge"&&!PF_.badge&&window.Notification&&Notification.permission==="default")Notification.requestPermission().then(updateBadge);
       PF_[k]=!PF_[k];savePref();b.querySelector(".swt").classList.toggle("on",PF_[k]);dirty=true;if(k==="badge")updateBadge()});
   };
   draw();
+  pushSub().then(x=>{pushOn=!!x&&Notification.permission==="granted";if(setPg==="main"&&document.body.contains(ov))draw()}).catch(()=>{});
 }
 /* ---------- stats ---------- */
 const HM10=["#d8ec84","#c2e070","#aad45f","#92c850","#7ab943","#62a838","#4c962f","#388427","#2a731f","#1f6318"];   // same 10 greens as the Chinese tracker heat map
