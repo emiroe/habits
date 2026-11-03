@@ -439,6 +439,7 @@ def timer_stop(req: Request):
 # studied on the Chinese tracker (the tracker is the timer; the daily goal follows the tracker's goal) ----
 POMODORO_URL = os.environ.get("POMODORO_URL", "https://pomodoro.romijn.app")
 CHINESE_URL = os.environ.get("CHINESE_URL", "https://chinese.romijn.app")
+SYNC_FROM = os.environ.get("SYNC_FROM", "2026-11-03")      # synced habits ignore tracker data before this day
 def sync_counts(src):
     """-> ({day: count}, goal) from the public /api/state of the tracker."""
     import urllib.request
@@ -465,7 +466,7 @@ def tracker_sync():
                 cur = {r[0].isoformat(): (r[1], r[2]) for r in c.execute("SELECT day,count,skipped FROM logs WHERE habit_id=%s", (hid,)).fetchall()}
                 for day in days:
                     want = min(per.get(day, 0), 9999); have = cur.get(day, (0, False))
-                    if have[1] or want == have[0] or day > t.isoformat(): continue
+                    if have[1] or want == have[0] or day > t.isoformat() or day < SYNC_FROM: continue
                     changed = True
                     if want == 0: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (hid, day))
                     else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,false) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count", (hid, day, want))

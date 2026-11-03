@@ -219,6 +219,7 @@ def test_achievement_push(c, monkeypatch):
     n = len(sent); c.post("/api/log", json={"habit_id": a, "day": main.today().isoformat(), "count": 1}); assert len(sent) == n   # not twice
 
 def test_pomodoro_sync(c, monkeypatch):
+    monkeypatch.setattr(main, "SYNC_FROM", "2000-01-01")
     import io, urllib.request
     c.post("/api/clean-slate", json={"confirm": "CLEAN"})
     hid = c.post("/api/habit", json={"name": "Focus on work", "unit": "pomodoros", "goal": 3, "sync": "pomodoro"}).json()["id"]
@@ -244,3 +245,13 @@ def test_chinese_sync(c, monkeypatch):
     main.tracker_sync()
     s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [76] and s["habits"][0]["goal"] == 90        # 4566 s = 76 min
     assert c.post("/api/habit", json={"name": "x", "sync": "other"}).status_code == 400
+
+def test_sync_ignores_days_before_start(c, monkeypatch):
+    import io, urllib.request
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "M", "unit": "min", "goal": 60, "sync": "chinese"}).json()["id"]
+    t = main.today().isoformat(); monkeypatch.setattr(main, "SYNC_FROM", t)
+    old = (main.today() - datetime.timedelta(days=2)).isoformat()
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"sessions": [{"day": old, "seconds": 600}, {"day": t, "seconds": 600}], "daily_minutes": 60}).encode()))
+    main.tracker_sync()
+    assert [l[1] for l in c.get("/api/state").json()["logs"] if l[0] == hid] == [t]
