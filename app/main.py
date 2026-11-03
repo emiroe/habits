@@ -552,7 +552,7 @@ def check(b: HabitIn):
     if b.kind == "timer": b.unit = "min"                          # a timer habit counts minutes
     iv = []
     if b.kind == "timer":
-        if len(b.intervals) > 12: raise HTTPException(400, "too many intervals")
+        if len(b.intervals) > 20: raise HTTPException(400, "too many intervals")
         for x in b.intervals:
             m, t = x.get("m"), x.get("t")
             if not isinstance(m, int) or not 1 <= m <= 240 or t not in ("f", "s", "l"): raise HTTPException(400, "bad interval")
