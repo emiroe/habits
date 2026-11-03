@@ -489,9 +489,9 @@ async function refresh(){   // reload the server numbers (streaks, summary) with
   sheet=s;render();document.scrollingElement.scrollTop=t;
 }
 /* ---------- detail sheet ---------- */
-let dId=null,dMonth=null,dLogs={};
+let dId=null,dMonth=null,dLogs={},dShown=false;
 async function openDetail(id){
-  dId=id;dMonth=sel.slice(0,7);dLogs={};
+  dId=id;dMonth=sel.slice(0,7);dLogs={};dShown=false;
   const h=S.habits.find(x=>x.id===id);
   const r=await api("GET",`/api/logs?start=${add(S.today,-399)}&end=${S.today}&habit_id=${id}`);
   for(const [,d,c,s] of r.logs)dLogs[d]=[c,s];
@@ -513,14 +513,15 @@ function detailSheet(){
   const d=sel,l=lg(h,d),multi=h.goal>1||h.kind==="timer",st=h.kind==="timer"?5:1;
   ov.innerHTML=`<div class="sheet"><h2><span style="font-size:26px;display:flex">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl" aria-label="Close">${X}</button></h2>
   <div class="tiles"><div class="tile"><b>${ico({emoji:"ic:flame",color:"#ff8a3c"})}${h.streak}</b><span>Streak</span></div><div class="tile"><b>${ico({emoji:"ic:trophy",color:"#f5b700"})}${h.best}</b><span>Best</span></div>
-  <div class="tile"><b>${h.total}</b><span>Done</span></div><div class="tile"><b>${h.rate==null?"–":h.rate+"%"}</b><span>Rate</span></div></div>
+  <div class="tile"><b>${ico({emoji:"ic:check",color:"#2ecc71"})}${h.total}</b><span>Done</span></div><div class="tile"><b>${ico({emoji:"ic:target",color:"#1e90ff"})}${h.rate==null?"–":h.rate+"%"}</b><span>Rate</span></div></div>
   ${multi?`<div class="step"><button id="mn">−</button><b>${l[0]} / ${h.goal}${h.unit?` <small>${esc(h.unit)}</small>`:""}</b><button id="pl">+</button></div>`:""}
   <div class="mh"><button id="pm" aria-label="Previous month">${BACK}</button>${nm}<button id="nm_" aria-label="Next month">${CHR.replace("class=\"ch\"","class=\"i\"")}</button></div><div class="cal" style="--hc:${h.color};--hf:${lum(h.color)>.6?"#1c1c1e":"#fff"}">${cal}</div>
   <p style="color:var(--dim);font-size:12px;margin:8px 4px">Tap a day to toggle it. ${multi?"Taps on the calendar complete the whole goal.":""}</p>
   <button class="btn" id="skp">${l[1]?"Undo skip":"Skip "+(d===S.today?"today":"this day")+" (keeps streak)"}</button>
   <button class="btn" id="ed"><span class="eb">${ico({emoji:"ic:pencil",color:"#f4f4f5"})}</span>Edit habit</button></div>`;
-  document.body.appendChild(ov);
-  const close=()=>{sheet=null;ov.remove()};
+  if(dShown){ov.style.animation="none";ov.querySelector(".sheet").style.animation="none"}
+  document.body.appendChild(ov);dShown=true;
+  const close=()=>{sheet=null;dShown=false;ov.remove()};
   ov.onclick=e=>{if(e.target===ov)close()};$("#cl").onclick=close;
   $("#pm").onclick=()=>{dMonth=add(`${dMonth}-01`,-1).slice(0,7);ov.remove();detailSheet()};
   $("#nm_").onclick=()=>{const n=add(`${dMonth}-28`,5).slice(0,7);if(n<=S.today.slice(0,7)){dMonth=n;ov.remove();detailSheet()}};
