@@ -457,7 +457,8 @@ function tinfo(t){
   return{i:t.iv.length-1,rem:0,type:t.iv[t.iv.length-1].t,focus,fin:true}
 }
 const IVN={f:"Focus",s:"Short Break",l:"Long Break"};
-const tdisp=t=>t.iv?mmss(tinfo(t).rem):mmss(telapsed(t));
+const trem=(h,t)=>(h.goal-(t?lg(h,t.day)[0]:lg(h,S.today)[0]))*60-(t?telapsed(t):0);   // stopwatch timers count DOWN to the goal, then up as overtime (+)
+const tdisp=t=>{if(t.iv)return mmss(tinfo(t).rem);const h=S.habits.find(x=>x.id===t.id);if(!h)return mmss(telapsed(t));const r=trem(h,t);return r>=0?mmss(r):"+"+mmss(-r)};
 const tlabel=t=>{const i=tinfo(t);return`${IVN[i.type]} · ${i.i+1}/${t.iv.length}`};
 let tlast=null,tfinAt=0,wake=null;
 async function keepAwake(){   // screen stays on while a timer runs and the app is open (iPhone Home Screen app, iOS 16.4+)
@@ -987,7 +988,7 @@ function timerSheet(){
   const t=tget(),mine=!!t&&t.id===h.id,other=!!t&&t.id!==h.id,done=lg(h,S.today)[0],hiv=!!(h.intervals&&h.intervals.length),oh=other?S.habits.find(x=>x.id===t.id):null;
   const ov=document.createElement("div");ov.className="ov";
   ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
-  <div class="tbig ${mine&&t.run?"go":""}" data-tt="${h.id}">${hiv?(mine?tdisp(t):mmss(h.intervals[0].m*60)):mmss(mine?telapsed(t):0)}</div>${hiv?`<div class="tsub" data-ts="${h.id}">${mine&&t.iv?tlabel(t):`Focus · 1/${h.intervals.length}`}</div>`:""}<div class="tsub">${done} / ${h.goal} min today</div>
+  <div class="tbig ${mine&&t.run?"go":""}" data-tt="${h.id}">${hiv?(mine?tdisp(t):mmss(h.intervals[0].m*60)):(mine?tdisp(t):mmss(Math.max(0,trem(h,null))))}</div>${hiv?`<div class="tsub" data-ts="${h.id}">${mine&&t.iv?tlabel(t):`Focus · 1/${h.intervals.length}`}</div>`:""}<div class="tsub">${done} / ${h.goal} min today</div>
   <div class="trow">${mine?(t.run?`<button class="btn" id="tp">Pause</button>`:`<button class="btn pri" id="ts">Resume</button>`):`<button class="btn pri" id="ts" ${other?"disabled":""}>Start</button>`}${mine?`<button class="btn" id="tx">Stop &amp; log</button>`:""}</div>
   ${other?`<p class="note">The timer for “${esc(oh?oh.name:"another habit")}” is still running. Stop it first.</p>`:""}
   <label class="l">Or add minutes by hand</label><div class="step"><button id="tm">−5</button><b>${done} min</b><button id="tpl">+5</button></div><div class="err" id="er"></div></div>`;
