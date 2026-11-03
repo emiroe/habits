@@ -311,7 +311,13 @@ async function api(m,u,b){
   if(!r.ok){let e="";try{e=(await r.json()).detail}catch(_){}throw new Error(e||r.status)}
   return r.json();
 }
+let newVer=false,firstLoad=true;
+if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",e=>{if(e.data==="updated")newVer=true});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&newVer&&!sheet&&!document.querySelector(".pg")&&!locked){try{sessionStorage.setItem("hbNav",JSON.stringify({tab,per,sel}))}catch(e){}location.reload()}});
 async function load(){
+  if(firstLoad){firstLoad=false;   // start from the copy on the phone so the screen is there at once, then bring it up to date
+    let c=null;try{c=JSON.parse(localStorage.getItem(STKEY)||"null")}catch(e){}
+    if(c&&c.edit&&!S){S=c;S.today=new Date().toLocaleDateString("sv");sel=sel||S.today;logs={};for(const [h,d,n,sk] of S.logs)logs[h+"|"+d]=[n,sk];applyQueue();loaded=S.logs_from;render();maybeLock()}}
   S=await api("GET","/api/state");
   if(!S.edit){render();return}
   sel=sel||S.today;
