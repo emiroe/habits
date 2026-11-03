@@ -922,7 +922,7 @@ function settingsSheet(){
       ${tg("push","bell","Notifications","Reminders for your habits and a nudge at 6:00, 12:00 and 18:00 with what is still open. Needs the app on your Home Screen."+(pushMsg?" "+pushMsg:""))}
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
-      <div class="sg">${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
+      <div class="sg">${tg2("sounds","snd","Sounds")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
       <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("export","tool","Export Data")}</div>
       <div class="sg">${row("pw","lock","Change password")}<button class="srw" id="lo" style="color:#ff5c5c"><span>Sign out</span></button></div></div>`;
       $("#cl").onclick=close;
