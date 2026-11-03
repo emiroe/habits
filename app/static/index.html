@@ -300,7 +300,6 @@ const PF=[["all","All Day"],["morning","Morning"],["afternoon","Afternoon"],["ev
 function tree(x,y,k,c1,c2){return `<g transform="translate(${x} ${y}) scale(${k})"><rect x="-1.2" y="0" width="2.4" height="14" fill="#1b4d44"/><path d="M0-30C10-30 16-20 14-9 13-1 6 4 0 4-8 4-14-2-14-10-14-21-8-30 0-30z" fill="${c1}"/><ellipse cx="-3" cy="-17" rx="3.4" ry="2" transform="rotate(35 -3 -17)" fill="${c2}"/><ellipse cx="6" cy="-6" rx="2.6" ry="1.6" transform="rotate(60 6 -6)" fill="${c2}"/></g>`}
 function bird(x,y,k,o){return `<path transform="translate(${x} ${y}) scale(${k})" d="M0 0C3-7 13-8 20-2 13-3 7-1 0 0z" fill="#d9a864" opacity="${o}"/>`}
 function scene(p){
-  if(PF_.minimal)return "";
   return `<svg class="scene" data-p="${p}" viewBox="0 0 390 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
   <g class="sun"><path class="beam" d="M-13-21L260 145 102 196-51 51z" fill="#f0c283"/><circle r="104" fill="#f0b46a" opacity=".07"/><circle r="72" fill="#f0b46a" opacity=".13"/><circle r="36" fill="#f0c283"/></g>
   <g class="moon"><path d="M150 20a22 22 0 1 0 24 30a17 17 0 1 1-24-30z" fill="#f4c98a"/></g>
@@ -890,8 +889,6 @@ function settingsSheet(){
       ov.innerHTML=`<div class="sheet big"><h2>General<button class="x" id="cl">✕</button></h2>
       <div class="sg">${row("tod","sun","Time of day")}${row("wk","cal","Start week on",S.week_start===6?"Sunday":"Monday")}</div>
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day.")}
-      ${tg("minimal","min","Minimalist Interface","Hide animation from the main screen.")}
-      ${tg("read","book","Read of the Day","See daily articles on the main screen.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${row("units","ruler","Units of Measure")}${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
       <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("export","tool","Export Data")}</div>
