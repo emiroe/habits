@@ -36,20 +36,21 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .scene{display:block;width:calc(100% + 32px);height:150px;margin:6px -16px 0}
 .panel{background:var(--panel);margin:0 -16px;padding:0 16px 120px;min-height:calc(100vh - 330px)}
 /* scene: every body is always in the SVG and moves between day parts */
-.scene .sun,.scene .moon,.scene .stars,.scene .birds,.scene .beam{transition:transform .95s cubic-bezier(.25,.8,.25,1),opacity .65s ease}
+.scene .sun,.scene .moon,.scene .stars,.scene .birds,.scene .beam{transition:transform .5s cubic-bezier(.3,.8,.3,1),opacity .35s ease}
 .scene .sun{transform:translate(195px,196px) scale(1);opacity:0}
 .scene[data-p=morning] .sun{transform:translate(195px,136px) scale(1);opacity:1}
 .scene[data-p=afternoon] .sun{transform:translate(128px,50px) scale(.47);opacity:1}
 .scene[data-p=evening] .sun{transform:translate(70px,180px) scale(.47);opacity:0}
 .scene .beam{opacity:0}.scene[data-p=afternoon] .beam{opacity:.1}
-.scene .moon{transform:translateY(96px);opacity:0}.scene[data-p=evening] .moon{transform:translateY(0);opacity:1;transition-delay:.15s}
-.scene .stars{opacity:0}.scene[data-p=evening] .stars{opacity:1;transition-delay:.45s}
+.scene .moon{transform:translateY(96px);opacity:0}.scene[data-p=evening] .moon{transform:translateY(0);opacity:1;transition-delay:.08s}
+.scene .stars{opacity:0}.scene[data-p=evening] .stars{opacity:1;transition-delay:.22s}
 .scene .birds{opacity:0;transform:translateX(-40px)}.scene[data-p=all] .birds{opacity:1;transform:translateX(0)}
-.panel.fx .grp,.panel.fx .hw,.panel.fx .empty{animation:fadeup .32s ease both}
+.panel.fx .grp,.panel.fx .hw,.panel.fx .empty{animation:fadeup .18s ease both}
 @keyframes fadeup{from{opacity:0;transform:translateY(8px)}}
 /* period carousel (loops, selected one centred) */
-.pf{display:flex;justify-content:center;align-items:center;overflow:hidden;padding:2px 0 14px;margin:0 -16px}
-.pf button{flex:none;padding:8px 18px;border-radius:20px;color:#8c8c92;font-size:14px;font-weight:300;white-space:nowrap}
+.pf{display:flex;justify-content:center;align-items:center;gap:2px;padding:2px 0 14px;margin:0 -16px}
+.pf button{flex:none;padding:8px 14px;border-radius:20px;color:#8c8c92;font-size:14px;font-weight:300;white-space:nowrap}
+@media(max-width:350px){.pf button{padding:8px 9px;font-size:13px}}
 .pf button.on{background:#363638;color:#fff;font-weight:400}
 .grp{text-align:center;color:#9a9a9f;font-size:14px;font-weight:300;margin:14px 0 12px}
 /* habit rows */
@@ -237,8 +238,7 @@ function topbar(title,left){return `<div class="top">${left||`<span class="ib"><
 const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"]];
 function panelHtml(d){
   let h=`<div class="pf">`;
-  const n=PF.length,ci=PF.findIndex(x=>x[0]===per);
-  for(let o=-3;o<=3;o++){const it=PF[(ci+o+n*3)%n];h+=`<button class="${o===0?"on":""}" data-pf="${it[0]}">${it[1]}</button>`}
+  for(const [k,l] of PF)h+=`<button class="${k===per?"on":""}" data-pf="${k}">${l}</button>`;
   h+=`</div>`;
   const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime");
   if(!vis.length)h+=`<div class="empty">${EMPTYMSG}</div>`;
