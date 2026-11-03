@@ -163,9 +163,14 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 .sheet .tile b{font-size:18px;display:flex;align-items:center;gap:5px}.sheet .tile b .ic{width:16px;height:16px;margin:0}.sheet .tile span{font-size:11px}
 .sheet{padding:14px 16px calc(18px + env(safe-area-inset-bottom))}.sheet h2{font-size:19px;margin-bottom:8px}.sheet h2 .x svg.i{width:16px;height:16px;stroke-width:2.4}.sheet h2 .x{display:flex;align-items:center;justify-content:center}
 .sheet .mh{margin:8px 0 6px;font-size:15px}.sheet .mh button{width:30px;height:30px;display:flex;align-items:center;justify-content:center}.sheet .mh svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6}
-.sheet .cal{gap:2px;padding:8px;border-radius:16px}.sheet .cal .c{aspect-ratio:auto;width:34px;height:34px;margin:auto;font-size:13px}.sheet .cal .hd{font-size:10px}
+.sheet .cal{column-gap:0;row-gap:3px;padding:8px;border-radius:16px}.sheet .cal .hd{font-size:10px;padding-bottom:2px}
+.sheet .cal div.c{position:relative;height:34px;aspect-ratio:auto;border-radius:0;display:flex;align-items:center;justify-content:center;font-size:13px;background:none;box-shadow:none;border:0}
+.sheet .cal div.c b{position:relative;z-index:1;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 13px/1 -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.sheet .cal div.c.ok b{background:var(--hc);color:var(--hf)}.sheet .cal div.c.sk b{border:2px dashed var(--dim)}.sheet .cal div.c.miss b{background:var(--card2)}
+.sheet .cal div.c.td b{box-shadow:0 0 0 2px var(--ac)}.sheet .cal div.c.jl::before,.sheet .cal div.c.jr::after{content:"";position:absolute;top:50%;height:22px;margin-top:-11px;background:var(--hc);opacity:.55}
+.sheet .cal div.c.jl::before{left:0;right:50%}.sheet .cal div.c.jr::after{left:50%;right:0}
 .sheet .btn{padding:11px;font-size:15px;margin-top:8px;border-radius:14px}.sheet .btn .eb{display:inline-block;width:16px;height:16px;vertical-align:-2px;margin-right:6px}.sheet .btn .eb .ic{width:16px;height:16px}
-.sheet .step{margin:8px 0}.sheet .step button{width:40px;height:40px}.sheet .step b{font-size:22px}
+.sheet .step{margin:8px 0}.sheet .step button{width:40px;height:40px}.sheet .step b{font:600 24px/1 -apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-variant-numeric:tabular-nums;min-width:110px;text-align:center}.sheet .step b small{font-size:14px;font-weight:500;color:var(--dim)}.sheet .tile b{font-family:-apple-system,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;font-weight:700}
 /* sheets */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fade .2s}
 @keyframes fade{from{opacity:0}}
@@ -498,17 +503,19 @@ function detailSheet(){
   const [y,m]=dMonth.split("-").map(Number),first=`${dMonth}-01`,off=wday(first),dim=new Date(Date.UTC(y,m,0)).getUTCDate();
   const nm=dt(first).toLocaleDateString("en-GB",{month:"long",year:"numeric",timeZone:"UTC"});
   let cal=WD.map(w=>`<div class="hd">${w[0]}</div>`).join("")+"<i></i>".repeat(off);
+  const okd=i=>{if(i<1||i>dim)return false;const l=dLogs[`${dMonth}-${String(i).padStart(2,"0")}`]||[0,false];return !l[1]&&l[0]>=h.goal};
   for(let i=1;i<=dim;i++){
-    const d=`${dMonth}-${String(i).padStart(2,"0")}`,l=dLogs[d]||[0,false],fu=d>S.today,ok=!l[1]&&l[0]>=h.goal;
+    const d=`${dMonth}-${String(i).padStart(2,"0")}`,l=dLogs[d]||[0,false],fu=d>S.today,ok=okd(i),wd=(off+i-1)%7;
     const cls=fu?"fu":ok?"ok":l[1]?"sk":h.repeat!=="weekly"&&sched(h,d)&&d>=h.created.slice(0,10)&&d<S.today?"miss":!sched(h,d)?"off":"";
-    cal+=`<div class="c ${cls} ${d===S.today?"td":""}" data-day="${fu?"":d}" ${ok?`style="background:${h.color}"`:""}>${i}</div>`;
+    const jn=ok&&wd>0&&okd(i-1)?" jl":"",jr=ok&&wd<6&&okd(i+1)?" jr":"";
+    cal+=`<div class="c ${cls}${jn}${jr} ${d===S.today?"td":""}" data-day="${fu?"":d}"><b>${i}</b></div>`;
   }
   const d=sel,l=lg(h,d),multi=h.goal>1||h.kind==="timer",st=h.kind==="timer"?5:1;
   ov.innerHTML=`<div class="sheet"><h2><span style="font-size:26px;display:flex">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl" aria-label="Close">${X}</button></h2>
   <div class="tiles"><div class="tile"><b>${ico({emoji:"ic:flame",color:"#ff8a3c"})}${h.streak}</b><span>Streak</span></div><div class="tile"><b>${ico({emoji:"ic:trophy",color:"#f5b700"})}${h.best}</b><span>Best</span></div>
   <div class="tile"><b>${h.total}</b><span>Done</span></div><div class="tile"><b>${h.rate==null?"–":h.rate+"%"}</b><span>Rate</span></div></div>
-  ${multi?`<div class="step"><button id="mn">−</button><b>${l[0]} / ${h.goal}<br><small style="font-size:12px;color:var(--dim);font-weight:600">${esc(h.unit)}</small></b><button id="pl">+</button></div>`:""}
-  <div class="mh"><button id="pm" aria-label="Previous month">${BACK}</button>${nm}<button id="nm_" aria-label="Next month">${CHR.replace("class=\"ch\"","class=\"i\"")}</button></div><div class="cal">${cal}</div>
+  ${multi?`<div class="step"><button id="mn">−</button><b>${l[0]} / ${h.goal}${h.unit?` <small>${esc(h.unit)}</small>`:""}</b><button id="pl">+</button></div>`:""}
+  <div class="mh"><button id="pm" aria-label="Previous month">${BACK}</button>${nm}<button id="nm_" aria-label="Next month">${CHR.replace("class=\"ch\"","class=\"i\"")}</button></div><div class="cal" style="--hc:${h.color};--hf:${lum(h.color)>.6?"#1c1c1e":"#fff"}">${cal}</div>
   <p style="color:var(--dim);font-size:12px;margin:8px 4px">Tap a day to toggle it. ${multi?"Taps on the calendar complete the whole goal.":""}</p>
   <button class="btn" id="skp">${l[1]?"Undo skip":"Skip "+(d===S.today?"today":"this day")+" (keeps streak)"}</button>
   <button class="btn" id="ed"><span class="eb">${ico({emoji:"ic:pencil",color:"#f4f4f5"})}</span>Edit habit</button></div>`;
