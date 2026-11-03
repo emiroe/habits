@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS habits (id serial PRIMARY KEY, name text NOT NULL, em
   days text NOT NULL DEFAULT '0123456',            -- scheduled weekdays, Monday = 0
   goal int NOT NULL DEFAULT 1, unit text NOT NULL DEFAULT '',   -- goal 8 + unit 'glasses' = a counting habit
   position int NOT NULL DEFAULT 0, created date NOT NULL);
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'units';   -- units | timer (a timer habit's goal and counts are MINUTES)
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS end_date date;                          -- last day the habit is scheduled (NULL = no end)
 CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
   count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
 CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value text NOT NULL);
@@ -67,6 +70,7 @@ class Login(BaseModel): password: str
 class NewPassword(BaseModel): current: str; new: str
 class HabitIn(BaseModel):
     name: str; emoji: str = "✅"; color: str = "#6c5ce7"; period: str = "anytime"; days: str = "0123456"; goal: int = 1; unit: str = ""
+    description: str = ""; kind: str = "units"; end_date: str | None = None
 class LogIn(BaseModel):
     habit_id: int; day: str; count: int | None = None; skipped: bool | None = None
 class Order(BaseModel): ids: list[int]
@@ -98,7 +102,7 @@ def logout(resp: Response):
     resp.delete_cookie("hb_auth"); return {"ok": True}
 
 # ---- the maths (pure functions, tested without a database) ----
-def sched(h, d): return str(d.weekday()) in h["days"]
+def sched(h, d): return str(d.weekday()) in h["days"] and not (h.get("end_date") and d > h["end_date"])
 def is_done(h, l): return bool(l) and not l[1] and l[0] >= h["goal"]
 def start_of(h, hl): return min([h["created"]] + list(hl))      # a habit also exists on days logged before it was created
 
@@ -132,8 +136,9 @@ def day_summary(habits, logs, t, n=400):
     return out
 
 def load(c, only_active_ids=None):
-    habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9]}
-              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created FROM habits ORDER BY position,id").fetchall()]
+    habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9],
+               "description": r[10], "kind": r[11], "end_date": r[12]}
+              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date FROM habits ORDER BY position,id").fetchall()]
     logs = {}
     for hid, day, cnt, sk in c.execute("SELECT habit_id,day,count,skipped FROM logs").fetchall(): logs.setdefault(hid, {})[day] = (cnt, sk)
     return habits, logs
@@ -147,7 +152,7 @@ def state(req: Request):
     out = []
     for h in habits:
         st = habit_stats(h, logs.get(h["id"], {}), t)
-        out.append({**h, "created": h["created"].isoformat(), **st})
+        out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
     return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t)}
 
@@ -167,25 +172,31 @@ def check(b: HabitIn):
     if b.period not in PERIODS: raise HTTPException(400, "bad period")
     if not b.days or not set(b.days) <= set("0123456") or len(set(b.days)) != len(b.days): raise HTTPException(400, "pick at least one weekday")
     b.days = "".join(sorted(b.days))
-    if not 1 <= b.goal <= 999: raise HTTPException(400, "goal must be 1-999")
+    if b.kind not in ("units", "timer"): raise HTTPException(400, "bad kind")
+    if b.kind == "timer": b.unit = "min"                          # a timer habit counts minutes
+    if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
+    b.description = b.description.strip()
+    if len(b.description) > 500: raise HTTPException(400, "description is too long")
     if len(b.unit) > 20 or not (b.emoji.strip() and len(b.emoji) <= 16): raise HTTPException(400, "bad emoji or unit")
     if len(b.color) != 7 or b.color[0] != "#" or any(ch not in "0123456789abcdefABCDEF" for ch in b.color[1:]): raise HTTPException(400, "bad colour")
+
+def end_of(b): return parse_day(b.end_date) if b.end_date else None
 
 @app.post("/api/habit")
 def habit_add(b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
         pos = c.execute("SELECT coalesce(max(position),0)+1 FROM habits").fetchone()[0]
-        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today())).fetchone()[0]
+        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b))).fetchone()[0]
     return {"id": i}
 
 @app.post("/api/habit/{hid}")
 def habit_update(hid: int, b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
-        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s WHERE id=%s",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), hid)).rowcount
+        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s WHERE id=%s",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), hid)).rowcount
     if not n: raise HTTPException(404, "no such habit")
     return {"ok": True}
 
@@ -224,6 +235,9 @@ def log_set(b: LogIn, req: Request):
 def health():
     with pool.connection() as c: c.execute("SELECT 1")
     return {"ok": True}
+
+@app.get("/favicon.ico")
+def favicon(): return FileResponse("static/icons/favicon.ico", media_type="image/x-icon")
 
 @app.get("/manifest.webmanifest")
 def manifest(): return FileResponse("static/manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})

@@ -24,6 +24,13 @@ def test_skip_and_schedule():
     hl[D(2026, 10, 26)] = (0, True)                                                       # skipped Monday keeps the streak alive, not counted
     s = main.habit_stats(h, hl, t); assert s["streak"] == 2 and s["total"] == 2
 
+def test_end_date():
+    t = D(2026, 11, 3)
+    hl = {D(2026, 10, 30): (1, False), D(2026, 10, 31): (1, False), D(2026, 11, 1): (1, False)}
+    assert main.habit_stats(H(created=D(2026, 10, 30)), hl, t)["streak"] == 0             # without an end the missed 2 and 3 Nov break it
+    s = main.habit_stats(H(created=D(2026, 10, 30), end_date=D(2026, 11, 1)), hl, t)      # days after the end date are not scheduled
+    assert s["streak"] == 3 and s["rate"] == 100
+
 def test_goal_and_summary():
     h = H(goal=3); t = D(2026, 11, 3)
     hl = {D(2026, 11, 2): (2, False), D(2026, 11, 3): (3, False)}
@@ -64,6 +71,22 @@ def test_flow(c):
     assert [h["id"] for h in c.get("/api/state").json()["habits"]] == [j, i]
     assert c.delete(f"/api/habit/{j}").status_code == 200 and c.delete(f"/api/habit/{i}").status_code == 200
     assert c.get("/api/state").json()["habits"] == []
+
+def test_timer_and_description(c):
+    c.post("/api/login", json={"password": os.environ["EDIT_PASSWORD"]})
+    assert c.post("/api/habit", json={"name": "a", "kind": "bogus"}).status_code == 400
+    assert c.post("/api/habit", json={"name": "a", "kind": "timer", "goal": 1441}).status_code == 400
+    assert c.post("/api/habit", json={"name": "a", "end_date": "nope"}).status_code == 400
+    assert c.post("/api/habit", json={"name": "a", "description": "x" * 501}).status_code == 400
+    i = c.post("/api/habit", json={"name": "Run", "kind": "timer", "goal": 30, "unit": "ignored", "description": " go far ", "end_date": "2099-01-01"}).json()["id"]
+    h = [x for x in c.get("/api/state").json()["habits"] if x["id"] == i][0]
+    assert h["kind"] == "timer" and h["unit"] == "min" and h["goal"] == 30 and h["description"] == "go far" and h["end_date"] == "2099-01-01"
+    t = main.today().isoformat()
+    assert c.post("/api/log", json={"habit_id": i, "day": t, "count": 30}).json()["count"] == 30           # minutes
+    assert c.post(f"/api/habit/{i}", json={"name": "Run", "kind": "units", "goal": 2, "end_date": None}).status_code == 200
+    h = [x for x in c.get("/api/state").json()["habits"] if x["id"] == i][0]
+    assert h["kind"] == "units" and h["end_date"] is None and h["description"] == ""
+    c.delete(f"/api/habit/{i}")
 
 def test_password(c):
     c.post("/api/login", json={"password": os.environ["EDIT_PASSWORD"]})
