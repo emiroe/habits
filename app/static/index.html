@@ -283,12 +283,13 @@ async function flushQ(){
   if(did&&!getQ().length){offline=false;updateOff();try{await refresh()}catch(e){}}}
 window.addEventListener("online",()=>flushQ());window.addEventListener("offline",()=>{offline=true;updateOff()});
 setInterval(flushQ,20000);
-let pinging=false;
+let pinging=false,failed=0;
 async function ping(){   // every second: is the server reachable? updates the label and syncs/refreshes as soon as it is back
   if(pinging||document.hidden||!S||!S.edit)return;pinging=true;let ok=false;
   try{if(navigator.onLine!==false){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),1500);const r=await fetch("/health",{cache:"no-store",signal:ac.signal});clearTimeout(t);ok=r.ok}}catch(e){}
   pinging=false;
-  if(!ok){if(!offline){offline=true;updateOff()}return}
+  if(!ok){if(++failed>=2&&!offline){offline=true;updateOff()}return}
+  failed=0;
   if(getQ().length&&!offline)flushQ();
   if(offline){offline=false;updateOff();await flushQ();if(!getQ().length&&!sheet&&!document.querySelector(".pg"))try{await refresh()}catch(e){}}}
 setInterval(ping,1000);
