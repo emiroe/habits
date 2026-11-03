@@ -43,6 +43,7 @@ LOG_DAYS = 90      # /api/state carries this many days of logs; older ones come 
 async def lifespan(app):
     pool.open(wait=True)
     with pool.connection() as c: c.execute(SCHEMA)
+    trash_load()
     task = asyncio.create_task(push_loop())
     yield
     task.cancel()
@@ -118,7 +119,9 @@ def logout(resp: Response):
 
 # ---- the maths (pure functions, tested without a database) ----
 def mset(h): return {int(x) for x in h.get("mdays", "").split(",") if x.strip().isdigit()}
+TRASH = set()          # ISO days with a waste collection (pushed from Home Assistant by /api/trash); habits with sync='trash' are due only then
 def sched(h, d):
+    if h.get("sync") == "trash": return d.isoformat() in TRASH and not (h.get("end_date") and d > h["end_date"])
     if h.get("end_date") and d > h["end_date"]: return False
     r = h.get("repeat", "daily")
     if r == "once": return d == h["created"]
@@ -206,7 +209,7 @@ def state(req: Request):
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
     return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 1100, vac), "vac": in_vac(t, vac),
-            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, "timer": tm, **pp, "push_key": vapid()[1]}
+            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, "timer": tm, "trash": sorted(TRASH), **pp, "push_key": vapid()[1]}
 
 class PrefsIn(BaseModel):
     vacation: bool | None = None
@@ -214,6 +217,21 @@ class PrefsIn(BaseModel):
     nudge: bool | None = None
     m_end: int | None = None
     e_start: int | None = None
+
+class TrashIn(BaseModel): dates: list[str]
+def trash_load():
+    global TRASH
+    with pool.connection() as c: r = c.execute("SELECT value FROM settings WHERE key='trash'").fetchone()
+    TRASH = set(json.loads(r[0])) if r else set()
+@app.post("/api/trash")
+def trash_set(b: TrashIn, req: Request):
+    """Collection days from Home Assistant. Days before today are kept (history), future days are replaced by the given list."""
+    need_auth(req); t = today().isoformat()
+    new = {parse_day(x).isoformat() for x in b.dates}
+    trash_load(); keep = {x for x in TRASH if x < t}
+    with pool.connection() as c:
+        c.execute("INSERT INTO settings VALUES ('trash',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (json.dumps(sorted(keep | {x for x in new if x >= t})),))
+    trash_load(); return {"days": len(TRASH)}
 
 @app.post("/api/prefs")
 def prefs_set(b: PrefsIn, req: Request):
@@ -612,7 +630,7 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
-    if b.sync not in (None, "", "pomodoro", "chinese", "reading"): raise HTTPException(400, "bad sync")
+    if b.sync not in (None, "", "pomodoro", "chinese", "reading", "trash"): raise HTTPException(400, "bad sync")
     if b.remind:
         try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
         except Exception: raise HTTPException(400, "bad reminder time")

@@ -340,7 +340,7 @@ async function ensureLogs(day){   // older than the state's window: fetch that w
   for(const h of S.habits)for(let i=0;i<7;i++)if(!logs[h.id+"|"+add(a,i)])logs[h.id+"|"+add(a,i)]=null;
 }
 const lg=(h,d)=>logs[h.id+"|"+d]||[0,false];
-const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return false;const r=h.repeat||"daily";
+const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return false;const r=h.repeat||"daily";if(h.sync==="trash")return(S.trash||[]).includes(d);
   if(r==="once")return d===h.created.slice(0,10);if(r==="weekly")return true;
   if(r==="monthly")return(h.mdays||"").split(",").includes(String(+d.slice(8)));return h.days.includes(String(wday(d)))};
 const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};

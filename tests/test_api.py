@@ -269,3 +269,13 @@ def test_reading_sync(c, monkeypatch):
 def test_chores_period(c):
     hid = c.post("/api/habit", json={"name": "Chore", "period": "chores"}).json()["id"]
     assert [h["period"] for h in c.get("/api/state").json()["habits"] if h["id"] == hid] == ["chores"]
+
+def test_trash_days(c):
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Trash", "sync": "trash", "period": "morning"}).json()["id"]
+    t = main.today(); tom = (t + datetime.timedelta(days=1)).isoformat()
+    assert c.post("/api/trash", json={"dates": [tom]}).json()["days"] == 1
+    s = c.get("/api/state").json(); assert s["trash"] == [tom]
+    h = main.sched({"sync": "trash", "days": "", "created": t}, t + datetime.timedelta(days=1)); assert h
+    assert not main.sched({"sync": "trash", "days": "", "created": t}, t)
+    assert c.post("/api/trash", json={"dates": ["x"]}).status_code == 400
