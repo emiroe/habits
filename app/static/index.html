@@ -50,6 +50,14 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .cf{position:absolute;width:8px;height:8px;border-radius:50%;pointer-events:none;animation:cf .7s ease-out forwards;z-index:30}
 @keyframes cf{to{transform:translate(var(--x),var(--y)) scale(.3);opacity:0}}
 .empty{text-align:center;color:var(--dim);padding:40px 10px}.empty big{font-size:56px;display:block}
+.hw{position:relative;border-radius:12px;margin-bottom:10px;overflow:hidden}
+.hw .h{margin-bottom:0;position:relative;z-index:1;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.hw .h.snap{transition:transform .22s ease-out}
+.hw .rv{position:absolute;inset:0;display:flex;align-items:center;padding:0 22px;font-weight:700;font-size:15px;opacity:0;transition:opacity .1s}
+.hw .rv.l{background:#30d158;color:#fff;justify-content:flex-start}.hw .rv.r{background:#5b5b60;color:#fff;justify-content:flex-end}
+.hw.sr .rv.l,.hw.sl .rv.r{opacity:1}
+.hw .rv svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;margin-right:8px}
+.hw .rv.r svg{margin:0 0 0 8px}
 /* manage list */
 .mg .sub{font-size:12px;color:var(--dim);margin-top:2px}
 .mg .mv{display:flex;flex-direction:column;justify-content:center;padding:0 10px}
@@ -212,14 +220,42 @@ function card(h,d){
   const sub=sk?"Skipped":h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
   const cnt=sk?`<b style="color:var(--dim)">–</b><small>skipped</small>`
     :`<b style="color:${dn?"#30d158":h.color}">${l[0]}</b><i style="color:${dn?"#30d15888":hex(h.color,.5)}">/${h.goal}</i><small>${esc(h.unit||"times")}</small>`;
-  return `<div class="h ${dn?"done":""} ${sk?"skip":""}" data-id="${h.id}"><button class="tx" data-open="${h.id}"><span class="em">${esc(h.emoji)}</span>
-  <span class="nm"><b>${esc(h.name)}</b><small><i>★</i>${sub}</small></span></button><button class="cnt" data-ck="${h.id}" aria-label="Add one">${cnt}</button></div>`;
+  return `<div class="hw" data-id="${h.id}"><div class="rv l"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Done</div><div class="rv r">Undo<svg viewBox="0 0 24 24"><path d="M4 9h11a5 5 0 010 10h-3M4 9l4-4M4 9l4 4"/></svg></div><div class="h ${dn?"done":""} ${sk?"skip":""}"><button class="tx" data-open="${h.id}"><span class="em">${esc(h.emoji)}</span>
+  <span class="nm"><b>${esc(h.name)}</b><small><i>★</i>${sub}</small></span></button><button class="cnt" data-ck="${h.id}" aria-label="Add one">${cnt}</button></div></div>`;
 }
 function bindToday(){
   document.querySelectorAll(".dy").forEach(b=>b.onclick=()=>{if(b.dataset.d<=S.today)go(b.dataset.d)});
   document.querySelectorAll("[data-pf]").forEach(b=>b.onclick=()=>{per=b.dataset.pf;render()});
-  document.querySelectorAll("[data-ck]").forEach(b=>b.onclick=e=>tap(+b.dataset.ck,e));
+  document.querySelectorAll("[data-ck]").forEach(b=>b.onclick=()=>tap(+b.dataset.ck));
   document.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDetail(+b.dataset.open));
+  document.querySelectorAll(".hw").forEach(bindSwipe);
+}
+// swipe right = finish (full goal), swipe left = unfinish (0, also clears a skip); a drag never counts as a tap
+let swiped=0;
+function bindSwipe(w){
+  const row=w.querySelector(".h"),id=+w.dataset.id,TH=90;
+  let x0=0,y0=0,dx=0,mode=0,pid=null;      // mode 0 = undecided, 1 = swiping, -1 = scrolling
+  row.addEventListener("pointerdown",e=>{if(e.button>0)return;x0=e.clientX;y0=e.clientY;dx=0;mode=0;pid=e.pointerId;row.classList.remove("snap")});
+  row.addEventListener("pointermove",e=>{
+    if(e.pointerId!==pid)return;
+    const ax=e.clientX-x0,ay=e.clientY-y0;
+    if(mode===0){if(Math.abs(ax)>10&&Math.abs(ax)>Math.abs(ay)*1.5){mode=1;try{row.setPointerCapture(pid)}catch(_){}}else if(Math.abs(ay)>10){mode=-1}}
+    if(mode!==1)return;
+    dx=Math.max(-160,Math.min(160,ax));
+    row.style.transform=`translateX(${dx}px)`;
+    w.classList.toggle("sr",dx>0);w.classList.toggle("sl",dx<0);
+  });
+  const end=async e=>{
+    if(e.pointerId!==pid)return;pid=null;
+    if(mode!==1)return;
+    swiped=Date.now();
+    row.classList.add("snap");row.style.transform="";w.classList.remove("sr","sl");
+    const h=S.habits.find(x=>x.id===id),l=lg(h,sel);
+    if(dx>=TH&&!(isDone(h,sel)))await swipeSet(id,h.goal);
+    else if(dx<=-TH&&(l[0]>0||l[1]))await swipeSet(id,0);
+  };
+  row.addEventListener("pointerup",end);row.addEventListener("pointercancel",end);
+  row.addEventListener("click",e=>{if(Date.now()-swiped<350){e.stopPropagation();e.preventDefault()}},true);
 }
 const daysText=x=>x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ");
 function viewHabits(){
@@ -255,15 +291,18 @@ async function setCount(h,d,n,opts){
   const p=api("POST","/api/log",body);
   return {p,became:!was&&isDone(h,d)};
 }
-async function tap(id,ev){
-  const h=S.habits.find(x=>x.id===id),d=sel,l=lg(h,d);
-  const n=h.goal===1?(isDone(h,d)?0:1):(l[0]>=h.goal&&!l[1]?0:l[0]+1);
-  const btn=ev.currentTarget,{p,became}=await setCount(h,d,n);
+async function swipeSet(id,n){
+  const h=S.habits.find(x=>x.id===id),d=sel;
+  const {p,became}=await setCount(h,d,n);
   render();
   if(became){const b=document.querySelector(`[data-ck="${id}"]`);if(b){b.classList.add("pop");confetti(b,h.color)}}
   if(navigator.vibrate)navigator.vibrate(became?25:8);
   try{await p}catch(e){}
   const keep=sel;await refresh();sel=keep;
+}
+async function tap(id){
+  const h=S.habits.find(x=>x.id===id),d=sel,l=lg(h,d);
+  await swipeSet(id,h.goal===1?(isDone(h,d)?0:1):(l[0]>=h.goal&&!l[1]?0:l[0]+1));
 }
 async function refresh(){   // reload the server numbers (streaks, summary) without losing the page state
   const t=document.scrollingElement.scrollTop,s=sheet;const keepLogs={...logs};
