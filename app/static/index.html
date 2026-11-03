@@ -246,6 +246,8 @@ async function load(){
   S=await api("GET","/api/state");
   if(!S.edit){render();return}
   sel=sel||S.today;
+  try{const n=JSON.parse(sessionStorage.getItem("hbNav")||"null");sessionStorage.removeItem("hbNav");   // refresh button: come back to the same page
+    if(n){if(["today","habits","stats"].includes(n.tab))tab=n.tab;if(["all","morning","afternoon","evening"].includes(n.per))per=n.per;if(/^\d{4}-\d\d-\d\d$/.test(n.sel)&&n.sel>=S.logs_from)sel=n.sel}}catch(e){}
   logs={};for(const [h,d,c,s] of S.logs)logs[h+"|"+d]=[c,s];
   loaded=S.logs_from;
   render();
@@ -870,7 +872,7 @@ function showTip(el){
 document.addEventListener("pointerover",e=>{const t=e.target.closest&&e.target.closest("[data-tip]");if(t)showTip(t)});
 document.addEventListener("pointerdown",e=>{const t=e.target.closest&&e.target.closest("[data-tip]");if(t)showTip(t);else hideTip()});
 document.addEventListener("pointermove",e=>{if(e.pointerType!=="touch"||e.buttons===0)return;const t=document.elementFromPoint(e.clientX,e.clientY),c=t&&t.closest&&t.closest("[data-tip]");if(c&&c!==tipEl)showTip(c)});
-document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("#rf");if(t){t.classList.add("spin");setTimeout(()=>location.reload(),250);return}
+document.addEventListener("click",e=>{const t=e.target.closest&&e.target.closest("#rf");if(t){t.classList.add("spin");try{sessionStorage.setItem("hbNav",JSON.stringify({tab,per,sel}))}catch(e){}setTimeout(()=>location.reload(),250);return}
   if(e.target.closest&&e.target.closest("[data-cog]")){sheet=settingsSheet;render()}});
 load().catch(()=>{});
 document.addEventListener("visibilitychange",()=>{
