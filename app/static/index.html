@@ -129,11 +129,12 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 .dt{background:#454548;border:0;border-radius:14px;color:var(--txt);font:300 20px Raleway,sans-serif;padding:14px 16px;outline:0}
 .del{display:block;width:100%;margin-top:8px;padding:20px;border-radius:22px;background:#333335;color:#ff453a;font-size:19px;font-weight:400}
 /* pick a new one */
-.search{display:flex;align-items:center;gap:14px;background:#3a3a3d;border-radius:18px;padding:0 20px;margin:6px 0 22px;height:64px;color:#8c8c92}
+.search{display:flex;align-items:center;gap:14px;background:#3a3a3d;border-radius:18px;padding:0 20px;margin:0 0 16px;height:56px;color:#8c8c92}
 .search input{flex:1;background:none;border:0;color:var(--txt);font:300 20px Raleway,sans-serif;outline:0;min-width:0}.search svg{width:28px;height:28px;flex:none}
-.cat{display:block;position:relative;width:100%;text-align:left;background:#333335;border-radius:22px;padding:30px 22px;margin-bottom:14px;overflow:hidden;min-height:112px}
-.cat b{display:block;font-weight:300;font-size:22px;max-width:62%}.cat span{display:block;font-size:15px;font-weight:300;color:#b0b0b5;margin-top:5px;max-width:58%}
+.cat{display:block;position:relative;width:100%;text-align:left;background:#333335;border-radius:22px;padding:20px 22px;margin-bottom:11px;overflow:hidden;min-height:92px}
+.cat b{display:block;font-weight:300;font-size:21px;max-width:62%}.cat span{display:block;font-size:15px;font-weight:300;color:#b0b0b5;margin-top:5px;max-width:58%}
 .cat .art{position:absolute;right:14px;top:50%;transform:translateY(-50%) rotate(-5deg);font-style:normal;font-size:50px;letter-spacing:-9px;white-space:nowrap}
+.art svg{display:block;width:100%;height:100%}.cat .art:has(svg){width:128px;height:88px;font-size:0;transform:translateY(-50%)}.cathead .art:has(svg){width:170px;height:112px;font-size:0;top:calc(14px + env(safe-area-inset-top))}
 .cta{position:fixed;left:0;right:0;bottom:0;padding:26px 28px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--panel) 40%);z-index:4}
 .yel{display:block;width:100%;max-width:480px;margin:0 auto;background:#f6b92b;color:#222;font-weight:700;font-size:19px;border-radius:32px;padding:20px}
 .pickbody{padding-bottom:130px}
@@ -501,8 +502,9 @@ const tWater=TP("Drink water","💧","#2aa8ff","Stay hydrated and flush out toxi
  tPhone=TP("Put the phone away","📵","#ff3b6b","Unplug before bed","evening",1,""),
  tWalk=TP("Go for a walk","🚶","#2ecc71","Fresh air, clear mind","afternoon",30,"min","timer"),
  tLang=TP("Learn a new language","🌍","#1e90ff","Open up a world of job opportunities","anytime",20,"min","timer");
+const ART_TR=`<svg viewBox="0 0 150 100" aria-hidden="true"><path d="M78 8c14 2 26 14 28 40-18-4-30-18-28-40z" fill="#1f6f5c"/><path d="M96 12c14-6 32 2 40 22-18 6-36-2-40-22z" fill="#2a8a72"/><path d="M62 52l54-18 22 12-52 24z" fill="#e6a82c"/><path d="M62 52l26 18v8L62 62z" fill="#f2c230"/><path d="M62 52l54-18 4 3-54 19z" fill="#f7d54e"/><path d="M88 70l50-24v6L88 78z" fill="#fff"/><g transform="translate(-8 0)"><path d="M20 22h60l-8 62q-1 6-8 6H36q-7 0-8-6z" fill="#27c3dc"/><path d="M24 44h52l-5 40q-1 6-8 6H37q-7 0-8-6z" fill="#14a3bd"/><ellipse cx="50" cy="22" rx="30" ry="7" fill="#58e0f2"/><ellipse cx="50" cy="22" rx="26" ry="5" fill="#27c3dc"/><path d="M30 34l4 34" stroke="#9aeaf7" stroke-width="4" stroke-linecap="round" opacity=".6"/></g></svg>`;
 const TPL=[
- {name:"Trending habits",sub:"Take a step in the right direction",art:"🥤📘",items:[TP("Focus with Pomodoro","🍅","#ff3b6b","Get more done with a timer","anytime",25,"min","timer"),TP("Study online","🖥️","#1e90ff","A world of new discoveries awaits","morning",1,""),tLang,tRead,tWater,tEx,tTeeth,tMed,TP("Eat a healthy meal","🍽️","#8a4dff","Energize and stay healthy with a balanced diet","anytime",1,"times"),tWalk,tSleep,tJournal,tStretch]},
+ {name:"Trending habits",sub:"Take a step in the right direction",art:"@@",items:[TP("Focus with Pomodoro","🍅","#ff3b6b","Get more done with a timer","anytime",25,"min","timer"),TP("Study online","🖥️","#1e90ff","A world of new discoveries awaits","morning",1,""),tLang,tRead,tWater,tEx,tTeeth,tMed,TP("Eat a healthy meal","🍽️","#8a4dff","Energize and stay healthy with a balanced diet","anytime",1,"times"),tWalk,tSleep,tJournal,tStretch]},
  {name:"Staying at home",sub:"Use this time to do something new",art:"🛋️🌿",items:[TP("Home workout","🏋️","#ff6a45","No gym needed","anytime",20,"min","timer"),tLang,TP("Cook a meal","🍳","#fd9644","Try a new recipe","evening",1,""),TP("Play an instrument","🎸","#8a4dff","Practice makes perfect","anytime",20,"min","timer"),TP("Draw or paint","🎨","#ff5c8a","Let your creativity flow","anytime",20,"min","timer"),tRead,TP("Call a friend","📞","#2ecc71","Stay close to the people you love","afternoon",1,""),TP("Clean a room","🧹","#00b8a9","A tidy home, a tidy mind","afternoon",1,"")]},
  {name:"Preventive care matters",sub:"Protect yourself and others",art:"😷🌿",items:[TP("Wash your hands","🧼","#2aa8ff","Keep the germs away","anytime",6,"times"),TP("Wear a mask","😷","#2ecc71","Protect yourself and others","anytime",1,""),TP("Sleep 8 hours","😴","#8a4dff","Rest strengthens your immune system","evening",1,""),tVit,tWater,TP("Disinfect surfaces","🧴","#00b8a9","Clean the things you touch most","afternoon",1,""),tTeeth]},
  {name:"Must-have habits",sub:"Small habits, big results",art:"🍎🥤",items:[tWater,tBed,tVit,TP("Eat fruit","🍎","#ff3b6b","An apple a day","anytime",2,"times"),TP("Take a shower","🚿","#2aa8ff","Fresh and ready","morning",1,""),TP("Check finances","💰","#2ecc71","Know where your money goes","evening",1,""),TP("Tidy up","🧹","#00b8a9","Ten minutes is enough","evening",1,""),tUp]},
@@ -527,7 +529,7 @@ function pickPage(){
   <div class="cta"><button class="yel" id="own">Create Your Own</button></div>`;
   el.querySelector(".pb").onclick=()=>closePage();
   const res=el.querySelector("#res"),q=el.querySelector("#q");
-  const cats=()=>{res.innerHTML=TPL.map((c,i)=>`<button class="cat" data-c="${i}"><b>${c.name}</b><span>${c.sub}</span><i class="art">${c.art}</i></button>`).join("");
+  const cats=()=>{res.innerHTML=TPL.map((c,i)=>`<button class="cat" data-c="${i}"><b>${c.name}</b><span>${c.sub}</span><i class="art">${c.art==="@@"?ART_TR:c.art}</i></button>`).join("");
     res.querySelectorAll(".cat").forEach(b=>b.onclick=()=>catPage(TPL[+b.dataset.c]))};
   q.oninput=()=>{
     const v=q.value.trim().toLowerCase();if(!v){cats();return}
@@ -541,7 +543,7 @@ function pickPage(){
 }
 function catPage(c){
   const el=document.createElement("div");el.className="pg";
-  el.innerHTML=`<div class="cathead"><button class="pb" aria-label="Back">${BACK}</button><h1>${c.name}</h1><i class="art">${c.art}</i></div><div class="pgbody" style="padding:0"><div class="cnt2">${c.items.length} habits</div>${tplRows(c.items)}</div>`;
+  el.innerHTML=`<div class="cathead"><button class="pb" aria-label="Back">${BACK}</button><h1>${c.name}</h1><i class="art">${c.art==="@@"?ART_TR:c.art}</i></div><div class="pgbody" style="padding:0"><div class="cnt2">${c.items.length} habits</div>${tplRows(c.items)}</div>`;
   el.querySelector(".pb").onclick=()=>closePage();bindRows(el,c.items);openPage(el);
 }
 /* ---------- add / edit (full page like Productive) ---------- */
