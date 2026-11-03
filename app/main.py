@@ -1,4 +1,4 @@
-import os, hmac, hashlib, time, datetime
+import os, json, hmac, hashlib, time, datetime
 from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from psycopg_pool import ConnectionPool
@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS habits (id serial PRIMARY KEY, name text NOT NULL, em
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'units';   -- units | timer (a timer habit's goal and counts are MINUTES)
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS end_date date;                          -- last day the habit is scheduled (NULL = no end)
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'daily';  -- daily (weekdays) | weekly (wk days per week) | monthly (mdays) | once
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS wk int NOT NULL DEFAULT 1;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS mdays text NOT NULL DEFAULT '';          -- monthly: comma separated dates, e.g. '1,15'
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS intervals text NOT NULL DEFAULT '';      -- timer: JSON [{"m":25,"t":"f"},{"m":5,"t":"s"}] f=focus s=short break l=long break
 CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
   count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
 CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value text NOT NULL);
@@ -71,6 +75,7 @@ class NewPassword(BaseModel): current: str; new: str
 class HabitIn(BaseModel):
     name: str; emoji: str = "✅"; color: str = "#6c5ce7"; period: str = "anytime"; days: str = "0123456"; goal: int = 1; unit: str = ""
     description: str = ""; kind: str = "units"; end_date: str | None = None
+    repeat: str = "daily"; wk: int = 1; mdays: str = ""; intervals: list[dict] = []
 class LogIn(BaseModel):
     habit_id: int; day: str; count: int | None = None; skipped: bool | None = None
 class Order(BaseModel): ids: list[int]
@@ -102,7 +107,14 @@ def logout(resp: Response):
     resp.delete_cookie("hb_auth"); return {"ok": True}
 
 # ---- the maths (pure functions, tested without a database) ----
-def sched(h, d): return str(d.weekday()) in h["days"] and not (h.get("end_date") and d > h["end_date"])
+def mset(h): return {int(x) for x in h.get("mdays", "").split(",") if x.strip().isdigit()}
+def sched(h, d):
+    if h.get("end_date") and d > h["end_date"]: return False
+    r = h.get("repeat", "daily")
+    if r == "once": return d == h["created"]
+    if r == "weekly": return True                      # any day counts, the goal is wk days per week (see habit_stats)
+    if r == "monthly": return d.day in mset(h)
+    return str(d.weekday()) in h["days"]
 def is_done(h, l): return bool(l) and not l[1] and l[0] >= h["goal"]
 def start_of(h, hl): return min([h["created"]] + list(hl))      # a habit also exists on days logged before it was created
 
@@ -111,6 +123,7 @@ def habit_stats(h, hl, t):
     today not done yet does not break it. Rate = done / due scheduled days (skipped ones excluded, today only once done)."""
     cur = best = total = hit = due = 0
     d = start_of(h, hl)
+    if h.get("repeat") == "weekly": return weekly_stats(h, hl, t)
     while d <= t:
         l = hl.get(d); done = is_done(h, l)
         if done: total += 1
@@ -118,6 +131,22 @@ def habit_stats(h, hl, t):
             if done: cur += 1; best = max(best, cur); hit += 1; due += 1
             elif d != t: cur = 0; due += 1
         d += datetime.timedelta(days=1)
+    return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
+
+def weekly_stats(h, hl, t):
+    """Weekly habit: a week succeeds with at least wk done days; the streak counts weeks. The week in progress never breaks it
+    and the first (partial) week does not count against it."""
+    first = start_of(h, hl); wk = max(1, h.get("wk", 1))
+    mon = lambda d: d - datetime.timedelta(days=d.weekday())
+    per = {}; total = 0
+    for d, l in hl.items():
+        if d <= t and is_done(h, l): total += 1; per[mon(d)] = per.get(mon(d), 0) + 1
+    cur = best = hit = due = 0; m = mon(first)
+    while m <= mon(t):
+        ok = per.get(m, 0) >= wk
+        if ok: cur += 1; best = max(best, cur); hit += 1; due += 1
+        elif m < mon(t) and m != mon(first): cur = 0; due += 1
+        m += datetime.timedelta(days=7)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
 def day_summary(habits, logs, t, n=400):
@@ -130,15 +159,15 @@ def day_summary(habits, logs, t, n=400):
             if d < starts[h["id"]]: continue
             l = logs.get(h["id"], {}).get(d)
             if l and l[1]: continue
-            if sched(h, d) or is_done(h, l):
+            if (sched(h, d) and h.get("repeat") != "weekly") or is_done(h, l):
                 tt += 1; dn += is_done(h, l)
         if tt: out.append([d.isoformat(), dn, tt])
     return out
 
 def load(c, only_active_ids=None):
     habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9],
-               "description": r[10], "kind": r[11], "end_date": r[12]}
-              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date FROM habits ORDER BY position,id").fetchall()]
+               "description": r[10], "kind": r[11], "end_date": r[12], "repeat": r[13], "wk": r[14], "mdays": r[15], "intervals": json.loads(r[16]) if r[16] else []}
+              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals FROM habits ORDER BY position,id").fetchall()]
     logs = {}
     for hid, day, cnt, sk in c.execute("SELECT habit_id,day,count,skipped FROM logs").fetchall(): logs.setdefault(hid, {})[day] = (cnt, sk)
     return habits, logs
@@ -172,8 +201,26 @@ def check(b: HabitIn):
     if b.period not in PERIODS: raise HTTPException(400, "bad period")
     if not b.days or not set(b.days) <= set("0123456") or len(set(b.days)) != len(b.days): raise HTTPException(400, "pick at least one weekday")
     b.days = "".join(sorted(b.days))
+    if b.repeat not in ("daily", "weekly", "monthly", "once"): raise HTTPException(400, "bad repeat")
+    if not 1 <= b.wk <= 7: raise HTTPException(400, "times per week must be 1-7")
+    try: md = sorted({int(x) for x in b.mdays.split(",") if x.strip()})
+    except ValueError: raise HTTPException(400, "bad month days")
+    if any(not 1 <= x <= 31 for x in md): raise HTTPException(400, "bad month days")
+    if b.repeat == "monthly" and not md: raise HTTPException(400, "pick at least one date")
+    b.mdays = ",".join(map(str, md))
     if b.kind not in ("units", "timer"): raise HTTPException(400, "bad kind")
     if b.kind == "timer": b.unit = "min"                          # a timer habit counts minutes
+    iv = []
+    if b.kind == "timer":
+        if len(b.intervals) > 12: raise HTTPException(400, "too many intervals")
+        for x in b.intervals:
+            m, t = x.get("m"), x.get("t")
+            if not isinstance(m, int) or not 1 <= m <= 240 or t not in ("f", "s", "l"): raise HTTPException(400, "bad interval")
+            iv.append({"m": m, "t": t})
+        if iv:
+            if not any(x["t"] == "f" for x in iv): raise HTTPException(400, "add at least one focus interval")
+            b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
+    b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
     b.description = b.description.strip()
     if len(b.description) > 500: raise HTTPException(400, "description is too long")
@@ -187,16 +234,16 @@ def habit_add(b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
         pos = c.execute("SELECT coalesce(max(position),0)+1 FROM habits").fetchone()[0]
-        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b))).fetchone()[0]
+        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "")).fetchone()[0]
     return {"id": i}
 
 @app.post("/api/habit/{hid}")
 def habit_update(hid: int, b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
-        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s WHERE id=%s",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), hid)).rowcount
+        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s,repeat=%s,wk=%s,mdays=%s,intervals=%s WHERE id=%s",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", hid)).rowcount
     if not n: raise HTTPException(404, "no such habit")
     return {"ok": True}
 

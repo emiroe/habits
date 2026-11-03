@@ -95,3 +95,30 @@ def test_password(c):
     assert c.post("/api/password", json={"current": os.environ["EDIT_PASSWORD"], "new": "longenough1"}).status_code == 200
     assert c.get("/api/state").json()["edit"] is True
     assert c.post("/api/login", json={"password": "longenough1"}).status_code == 200
+
+def test_repeat_modes():
+    d = D(2026, 11, 3)
+    assert main.sched(H(repeat="monthly", mdays="3,15"), d) and not main.sched(H(repeat="monthly", mdays="4"), d)
+    assert main.sched(H(repeat="once", created=d), d) and not main.sched(H(repeat="once", created=d), D(2026, 11, 4))
+    assert main.sched(H(repeat="weekly", wk=3), d)
+    # weekly: 2 of 3 days in a week fails, 3 passes; the running week never breaks the streak
+    hl = {}
+    for w, n in ((2, 3), (3, 3), (4, 2)):                         # weeks starting Mon 12 Oct, 19 Oct, 26 Oct
+        for i in range(n): hl[D(2026, 10, 12) + datetime.timedelta(days=7 * (w - 2) + i)] = (1, False)
+    hl[D(2026, 11, 2)] = (1, False)
+    h = H(repeat="weekly", wk=3, created=D(2026, 10, 5))
+    s = main.habit_stats(h, hl, D(2026, 11, 3))
+    assert s["best"] == 2 and s["streak"] == 0                    # 26 Oct week had 2 (<3) -> reset
+    hl[D(2026, 10, 28)] = (1, False)
+    assert main.habit_stats(h, hl, D(2026, 11, 3))["streak"] == 3
+
+def test_new_fields_api(c):
+    r = c.post("/api/habit", json={"name": "Pom", "emoji": "ic:tomato", "color": "#ffffff", "kind": "timer", "goal": 1, "days": "0123456",
+              "intervals": [{"m": 25, "t": "f"}, {"m": 5, "t": "s"}, {"m": 25, "t": "f"}, {"m": 15, "t": "l"}]}); assert r.status_code == 200, r.text
+    hb = [x for x in c.get("/api/state").json()["habits"] if x["name"] == "Pom"][0]
+    assert hb["goal"] == 50 and hb["unit"] == "min" and len(hb["intervals"]) == 4
+    bad = c.post("/api/habit", json={"name": "x", "kind": "timer", "intervals": [{"m": 5, "t": "s"}]}); assert bad.status_code == 400
+    assert c.post("/api/habit", json={"name": "m", "repeat": "monthly", "mdays": ""}).status_code == 400
+    ok = c.post("/api/habit", json={"name": "m", "repeat": "monthly", "mdays": "15,1"}); assert ok.status_code == 200
+    assert [x for x in c.get("/api/state").json()["habits"] if x["name"] == "m"][0]["mdays"] == "1,15"
+    assert c.post("/api/habit", json={"name": "w", "repeat": "weekly", "wk": 8}).status_code == 400
