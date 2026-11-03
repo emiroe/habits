@@ -828,7 +828,7 @@ function settingsSheet(){
   $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});sheet=null;S={edit:false};render()};
 }
 /* ---------- stats ---------- */
-const HM10=["#cfe6ff","#b3d6ff","#93c4ff","#72b0ff","#519bff","#3a86f0","#2a72d8","#1f5fbd","#174c9c","#103b7c"];   // 10 steps like the Chinese tracker heat map, in blue
+const HM10=["#d8ec84","#c2e070","#aad45f","#92c850","#7ab943","#62a838","#4c962f","#388427","#2a731f","#1f6318"];   // same 10 greens as the Chinese tracker heat map
 function viewStats(){
   const days=S.days,map=Object.fromEntries(days.map(x=>[x[0],x]));
   const perfect=days.filter(x=>x[1]===x[2]).length;
@@ -840,7 +840,7 @@ function viewStats(){
   for(let i=11;i>=0;i--){
     const a=add(wk,-7*i),xs=[];for(let j=0;j<7;j++){const x=map[add(a,j)];if(x)xs.push(x[1]/x[2])}
     const v=xs.length?xs.reduce((p,q)=>p+q,0)/xs.length:0;
-    bars+=`<div data-tip="Week of ${fd(a)} · ${Math.round(v*100)}%" style="height:${Math.max(4,v*100)}%"></div>`;lbl+=`<span>${+a.slice(8)}/${+a.slice(5,7)}</span>`;
+    bars+=`<div data-tip="Week of ${fd(a)} · ${Math.round(v*100)}%" style="height:${Math.max(4,v*100)}%;background:${v>0?HM10[Math.min(9,Math.ceil(v*10)-1)]:"#3a3a3d"}"></div>`;lbl+=`<span>${+a.slice(8)}/${+a.slice(5,7)}</span>`;
   }
   h+=`<div class="sec">Weekly completion</div><div class="bars">${bars}</div><div class="bl">${lbl}</div>`;
   let cells="";const st=add(wk,-7*25);
