@@ -131,10 +131,10 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 /* pick a new one */
 .search{display:flex;align-items:center;gap:14px;background:#3a3a3d;border-radius:18px;padding:0 20px;margin:0 0 16px;height:56px;color:#8c8c92}
 .search input{flex:1;background:none;border:0;color:var(--txt);font:300 20px Raleway,sans-serif;outline:0;min-width:0}.search svg{width:28px;height:28px;flex:none}
-.cat{display:block;position:relative;width:100%;text-align:left;background:#333335;border-radius:22px;padding:20px 22px;margin-bottom:16px;overflow:visible;min-height:92px}
+.cat{display:block;position:relative;width:100%;text-align:left;background:#333335;border-radius:22px;padding:20px 22px;margin-bottom:11px;overflow:hidden;min-height:92px}
 .cat b{display:block;font-weight:300;font-size:21px;max-width:60%}.cat span{display:block;font-size:15px;font-weight:300;color:#b0b0b5;margin-top:5px;max-width:58%}
 .cat .art{position:absolute;right:14px;top:50%;transform:translateY(-50%) rotate(-5deg);font-style:normal;font-size:50px;letter-spacing:-9px;white-space:nowrap}
-.art svg{display:block;width:100%;height:100%}.cat .art:has(svg){width:180px;height:120px;right:-2px;top:auto;bottom:0;font-size:0;transform:none;pointer-events:none}.cathead .art:has(svg){width:170px;height:112px;font-size:0;top:calc(14px + env(safe-area-inset-top))}
+.art svg{display:block;width:100%;height:100%}.cat .art:has(svg){width:150px;top:6px;bottom:6px;right:8px;font-size:0;transform:none;pointer-events:none}.cathead .art:has(svg){width:170px;height:112px;font-size:0;top:calc(14px + env(safe-area-inset-top))}
 .cta{position:fixed;left:0;right:0;bottom:0;padding:26px 28px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--panel) 40%);z-index:4}
 .yel{display:block;width:100%;max-width:480px;margin:0 auto;background:#f6b92b;color:#222;font-weight:700;font-size:19px;border-radius:32px;padding:20px}
 .pickbody{padding-bottom:130px}
@@ -504,7 +504,7 @@ const tWater=TP("Drink water","💧","#2aa8ff","Stay hydrated and flush out toxi
  tLang=TP("Learn a new language","🌍","#1e90ff","Open up a world of job opportunities","anytime",20,"min","timer");
 const lf=(x,y,r=0,c="#1f6f5c",s=1)=>`<path transform="translate(${x} ${y}) rotate(${r}) scale(${s})" d="M0 0c-8-14-2-30 10-38 8 16 4 32-10 38z" fill="${c}"/>`;
 const G1="#1f6f5c",G2="#2a8a72",T1="#3dd6e8",T2="#14a3bd",T3="#0e7f95",PU="#7a3fbf",PU2="#51307f",YE="#f2c230",OR="#f39a3d",PK="#e0566e",SK="#e9a468",BR="#7a4a32";
-const SV=b=>`<svg viewBox="0 0 150 100" aria-hidden="true">${b}</svg>`;
+const SV=b=>`<svg viewBox="0 0 150 100" preserveAspectRatio="xMaxYMid meet" aria-hidden="true">${b}</svg>`;
 const ARTS={
 trending:SV(`<path d="M78 8c14 2 26 14 28 40-18-4-30-18-28-40z" fill="${G1}"/><path d="M96 12c14-6 32 2 40 22-18 6-36-2-40-22z" fill="${G2}"/><path d="M62 52l54-18 22 12-52 24z" fill="#e6a82c"/><path d="M62 52l26 18v8L62 62z" fill="${YE}"/><path d="M62 52l54-18 4 3-54 19z" fill="#f7d54e"/><path d="M88 70l50-24v6L88 78z" fill="#fff"/><g transform="translate(-8 0)"><path d="M20 22h60l-8 62q-1 6-8 6H36q-7 0-8-6z" fill="#27c3dc"/><path d="M24 44h52l-5 40q-1 6-8 6H37q-7 0-8-6z" fill="${T2}"/><ellipse cx="50" cy="22" rx="30" ry="7" fill="#58e0f2"/><ellipse cx="50" cy="22" rx="26" ry="5" fill="#27c3dc"/><path d="M30 34l4 34" stroke="#9aeaf7" stroke-width="4" stroke-linecap="round" opacity=".6"/></g>`),
 home:SV(`${lf(40,92,-20,G1,1.1)}<path d="M26 72h18v22q0 4-4 4H30q-4 0-4-4z" fill="${T1}"/><rect x="44" y="30" width="88" height="46" rx="18" fill="${PU}"/><rect x="44" y="58" width="92" height="24" rx="8" fill="#8f55d6"/><rect x="38" y="48" width="22" height="40" rx="11" fill="#8f55d6"/><rect x="124" y="42" width="24" height="46" rx="12" fill="#8f55d6"/><ellipse cx="96" cy="56" rx="22" ry="9" fill="${OR}"/><circle cx="78" cy="54" r="8" fill="${OR}"/><path d="M88 50l2 12M97 48l1 14M106 50l-1 12" stroke="#c9742a" stroke-width="3"/>`),
