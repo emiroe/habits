@@ -919,9 +919,7 @@ function settingsSheet(){
     if(setPg==="main"){
       ov.innerHTML=`<div class="sheet big"><h2>General<button class="x" id="cl">✕</button></h2>
       <div class="sg">${row("tod","sun","Time of day")}${row("wk","cal","Start week on",S.week_start===6?"Sunday":"Monday")}</div>
-      ${tg("push","bell","Notifications","Reminders and updates from this app. Needs the app on your Home Screen.")}
-      ${tg("nudge","bell","Part-of-day nudges","A reminder at the start of morning, afternoon and evening listing what is still open.")}
-      <div class="sg">${row("ptest","bell","Send a test notification")}</div><p id="pm" style="margin:-4px 6px 12px;color:#8c8c92;font-size:12.500px;font-weight:300">${esc(pushMsg)}</p>
+      ${tg("push","bell","Notifications","Reminders for your habits and a nudge at 6:00, 12:00 and 18:00 with what is still open. Needs the app on your Home Screen."+(pushMsg?" "+pushMsg:""))}
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>

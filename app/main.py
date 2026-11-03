@@ -308,8 +308,8 @@ def push_tick(now=None):
         k = "r%d" % h["id"]
         if h["remind"] and k not in sent and due(h["remind"]):
             mark(k); push_all(h["name"], "Time for %s · %d %s" % (h["name"], h["goal"], h["unit"] or "times") if h["kind"] != "timer" else "Time for %s · %d min" % (h["name"], h["goal"]), badge, k)
-    if pp["nudge"]:
-        for part, at in (("morning", "08:00"), ("afternoon", "%02d:00" % pp["m_end"]), ("evening", "%02d:00" % pp["e_start"])):
+    if True:     # nudges at 06:00, 12:00 and 18:00 for everyone who has notifications on
+        for part, at in (("morning", "06:00"), ("afternoon", "12:00"), ("evening", "18:00")):
             k = "n" + part
             if k in sent or not due(at): continue
             mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime"))
