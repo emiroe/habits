@@ -345,8 +345,9 @@ const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return 
   if(r==="once")return d===h.created.slice(0,10);if(r==="weekly"||r==="month")return true;
   if(r==="monthly")return(h.mdays||"").split(",").includes(String(+d.slice(8)));return h.days.includes(String(wday(d)))};
 const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};
+const cool=(h,d)=>{const n=h.repeat==="month"?15:h.repeat==="weekly"&&h.wk===1&&!/gym/i.test(h.name)?4:0;for(let i=1;i<=n;i++)if(isDone(h,add(d,-i)))return true;return false};   // rest after doing it: month 15 days, once-a-week 4 days (not the gym)
 const mDone=(h,d)=>{let n=0;for(let i=1;i<=31;i++)if(isDone(h,d.slice(0,8)+String(i).padStart(2,"0")))n++;return n};
-function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(h.repeat==="weekly"&&(h.days||"").length===1&&!inVac(d)){const a=hmon(h,S.today);return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&[0,1,2,3,4,5,6].filter(i=>isDone(h,add(a,i))).length<h.wk)}
+function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(d===S.today&&!l[0]&&!l[1]&&cool(h,d))return false;if(h.repeat==="weekly"&&(h.days||"").length===1&&!inVac(d)){const a=hmon(h,S.today);return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&[0,1,2,3,4,5,6].filter(i=>isDone(h,add(a,i))).length<h.wk)}
   if(h.repeat==="month"&&!inVac(d)){return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&mDone(h,d)<h.wk)}if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
 function dayProg(d){const v=visible(d).filter(h=>!lg(h,d)[1]);return [v.filter(h=>isDone(h,d)).length,v.length]}
 
@@ -385,7 +386,7 @@ const SLOTH=`<svg viewBox="0 0 270 160" aria-hidden="true"><path d="M205 20c10-1
 const EMPTYMSG=`${SLOTH}There's nothing due.<br>Time to create new habits!`;
 function dueCount(){   // habits still open today for the current part of day (plus anytime)
   if(!S||!S.habits||inVac(S.today))return 0;const pn=partNow();
-  return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"&&h.period!=="chores"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
+  return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"&&h.period!=="chores"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today)||cool(h,S.today))return false;
     if(h.repeat==="month")return mDone(h,S.today)<h.wk;
     if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(hmon(h,S.today),i))).length;return wd<h.wk}return true}).length}
 function updateBadge(){try{if(!navigator.setAppBadge)return;const n=PF_.badge?dueCount():0;if(n>0)navigator.setAppBadge(n).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}catch(e){}}

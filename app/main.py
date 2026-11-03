@@ -317,6 +317,11 @@ def push_all(title, body, badge=0, tag=None):
         except Exception: pass
     return sent
 
+def cooling(h, hl, t):
+    """Rest period after doing it: a monthly habit stays off the list for 15 days, a once-a-week habit (not the gym) for 4 days. Days before today only."""
+    n = 15 if h["repeat"] == "month" else 4 if h["repeat"] == "weekly" and h["wk"] == 1 and "gym" not in h["name"].lower() else 0
+    return any(is_done(h, hl.get(t - datetime.timedelta(days=i))) for i in range(1, n + 1))
+
 def open_habits(habits, logs, t, vac, ws, parts):
     """Habits still to do today in the given parts of the day."""
     if in_vac(t, vac): return []
@@ -324,7 +329,7 @@ def open_habits(habits, logs, t, vac, ws, parts):
     for h in habits:
         if h["period"] not in parts or not sched(h, t) or t < h["created"]: continue
         l = logs.get(h["id"], {}).get(t)
-        if (l and l[1]) or is_done(h, l): continue
+        if (l and l[1]) or is_done(h, l) or cooling(h, logs.get(h["id"], {}), t): continue
         if h["repeat"] == "weekly":
             mon = t - datetime.timedelta(days=(t.weekday() - hws(h, ws)) % 7)
             if sum(is_done(h, logs.get(h["id"], {}).get(mon + datetime.timedelta(days=i))) for i in range(7)) >= h["wk"]: continue

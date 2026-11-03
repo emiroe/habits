@@ -310,3 +310,18 @@ def test_achievements_specific(c):
     assert {"streak", "checks", "perfect", "pstreak", "mandarin"} <= set(a) and "focus" not in a
     assert a["mandarin"]["tiers"][0] == 5 and a["mandarin"]["icon"] and a["mandarin"]["v"] == 0
     main.ach_check()
+
+
+def test_cooling_after_done(c):
+    import datetime
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    m = c.post("/api/habit", json={"name": "Wash the windows", "repeat": "month", "wk": 1, "period": "chores"}).json()["id"]
+    t = main.today(); hs = [{"id": 1, "name": "Wash", "repeat": "month", "wk": 1, "period": "chores", "days": "", "goal": 1, "created": t - datetime.timedelta(days=60), "end_date": None, "sync": ""}]
+    day = lambda n: t - datetime.timedelta(days=n)
+    assert main.open_habits(hs, {1: {day(15): (1, False)}}, t, [], 0, ("chores",)) == []
+    assert main.open_habits(hs, {1: {day(16): (1, False)}}, t, [], 0, ("chores",)) == hs
+    L = {day(1): (1, False)}
+    assert not main.cooling({**hs[0], "name": "Go to the gym", "repeat": "weekly", "wk": 1}, L, t)
+    assert main.cooling({**hs[0], "name": "Call parents", "repeat": "weekly", "wk": 1}, L, t)
+    assert not main.cooling({**hs[0], "name": "Read", "repeat": "weekly", "wk": 3}, L, t)
+    assert not main.cooling({**hs[0], "name": "Call parents", "repeat": "weekly", "wk": 1}, {day(5): (1, False)}, t)
