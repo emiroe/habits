@@ -172,3 +172,48 @@ def test_push_basics(c):
     s = c.get("/api/state").json(); assert s["nudge"] is True and s["m_end"] == 13
     assert c.post("/api/prefs", json={"m_end": 20}).status_code == 400
     main.push_tick()           # no crash; the fake subscription fails silently
+
+def _tm():
+    return main.today()
+
+def test_timer_on_server(c, monkeypatch):
+    sent = []; monkeypatch.setattr(main, "push_all", lambda *a, **k: sent.append(a) or 1)
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Focus", "kind": "timer", "intervals": [{"m": 1, "t": "f"}, {"m": 1, "t": "s"}]}).json()["id"]
+    other = c.post("/api/habit", json={"name": "Other", "kind": "timer", "goal": 10}).json()["id"]
+    assert c.post("/api/timer/start", json={"habit_id": hid}).status_code == 200
+    assert c.post("/api/timer/start", json={"habit_id": other}).status_code == 409             # one timer at a time
+    t = c.get("/api/state").json()["timer"]; assert t["habit_id"] == hid and t["running"] and t["elapsed_ms"] < 5000
+    c.post("/api/timer/pause"); t = c.get("/api/state").json()["timer"]; assert not t["running"]
+    c.post("/api/timer/start", json={"habit_id": hid})
+    with main.pool.connection() as cn: cn.execute("UPDATE timer SET acc_ms=70000, started=now() - interval '10 seconds'")      # 80 s: second phase starts
+    main.timer_tick(); assert any("Short break" in a[1] for a in sent)
+    with main.pool.connection() as cn: cn.execute("UPDATE timer SET acc_ms=130000")                                              # past the end: finished
+    main.timer_tick()
+    s = c.get("/api/state").json(); assert s["timer"] is None
+    assert [l[2] for l in s["logs"] if l[0] == hid] == [1]                                  # 1 focus minute logged by the server
+    assert any("finished" in a[1] for a in sent)
+    c.post("/api/timer/start", json={"habit_id": other})
+    with main.pool.connection() as cn: cn.execute("UPDATE timer SET acc_ms=0, started=now() - interval '10 minutes'")
+    r = c.post("/api/timer/stop").json(); assert r["minutes"] == 10
+
+def test_export_import(c):
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    a = c.post("/api/habit", json={"name": "A", "goal": 3, "unit": "glasses", "remind": "08:15"}).json()["id"]
+    t = main.today().isoformat(); c.post("/api/log", json={"habit_id": a, "day": t, "count": 2})
+    ex = c.get("/api/export").json(); assert ex["app"] == "habits" and len(ex["habits"]) == 1 and ex["logs"] == [[a, t, 2, False]]
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"}); assert c.get("/api/state").json()["habits"] == []
+    r = c.post("/api/import", json=ex); assert r.status_code == 200 and r.json() == {"habits": 1, "logs": 1}, r.text
+    s = c.get("/api/state").json(); h = s["habits"][0]; assert h["name"] == "A" and h["goal"] == 3 and h["remind"] == "08:15" and s["logs"][0][2] == 2
+    assert c.post("/api/habit", json={"name": "next"}).json()["id"] > a                      # id sequence continues
+    assert c.post("/api/import", json={"app": "other", "version": 1, "habits": [], "logs": []}).status_code == 400
+    bad = {**ex, "habits": [{**ex["habits"][0], "goal": 5000}]}; assert c.post("/api/import", json=bad).status_code == 400
+
+def test_achievement_push(c, monkeypatch):
+    sent = []; monkeypatch.setattr(main, "push_all", lambda *a, **k: sent.append(a) or 1)
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    a = c.post("/api/habit", json={"name": "A"}).json()["id"]
+    main.ach_check(); assert sent == []                                                       # first run only records
+    c.post("/api/log", json={"habit_id": a, "day": main.today().isoformat(), "count": 1})     # first perfect day + first check-in
+    assert any("1 perfect day" in x[1] for x in sent), sent
+    n = len(sent); c.post("/api/log", json={"habit_id": a, "day": main.today().isoformat(), "count": 1}); assert len(sent) == n   # not twice

@@ -30,6 +30,8 @@ ALTER TABLE habits ADD COLUMN IF NOT EXISTS intervals text NOT NULL DEFAULT ''; 
 CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
   count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
 CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value text NOT NULL);
+CREATE TABLE IF NOT EXISTS timer (id int PRIMARY KEY DEFAULT 1 CHECK (id = 1), habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
+  acc_ms bigint NOT NULL DEFAULT 0, started timestamptz, notif int NOT NULL DEFAULT 0, goal_sent boolean NOT NULL DEFAULT false);
 CREATE TABLE IF NOT EXISTS push_subs (endpoint text PRIMARY KEY, p256dh text NOT NULL, auth text NOT NULL);
 CREATE TABLE IF NOT EXISTS push_sent (key text PRIMARY KEY, day date NOT NULL);
 """
@@ -194,7 +196,7 @@ def load(c, only_active_ids=None):
 def state(req: Request):
     if not authed(req): return {"edit": False}
     t = today()
-    with pool.connection() as c: habits, logs = load(c); vac, ws = prefs(c); pp = push_prefs(c)
+    with pool.connection() as c: habits, logs = load(c); vac, ws = prefs(c); pp = push_prefs(c); tm = timer_public(timer_row(c))
     lo = t - datetime.timedelta(days=LOG_DAYS)
     out = []
     for h in habits:
@@ -202,7 +204,7 @@ def state(req: Request):
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
     return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 1100, vac), "vac": in_vac(t, vac),
-            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, **pp, "push_key": vapid()[1]}
+            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, "timer": tm, **pp, "push_key": vapid()[1]}
 
 class PrefsIn(BaseModel):
     vacation: bool | None = None
@@ -243,7 +245,7 @@ def clean_slate(b: CleanIn, req: Request):
     need_auth(req)
     if b.confirm != "CLEAN": raise HTTPException(400, "type CLEAN to confirm")
     with pool.connection() as c:
-        c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits"); c.execute("DELETE FROM settings WHERE key='vac'")
+        c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits"); c.execute("DELETE FROM settings WHERE key IN ('vac','ach_seen')")
     return {"ok": True}
 
 # ---- push notifications (Web Push, works for the app on the iPhone Home Screen) ----
@@ -315,11 +317,131 @@ def push_tick(now=None):
             mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime"))
             if hs: push_all("%s · %d to do" % (part.capitalize(), len(hs)), ", ".join(h["name"] for h in hs[:6]) + (" …" if len(hs) > 6 else ""), len(hs), k)
 
+# ---- achievements (same milestones as the Awards page): a push when a new one is reached ----
+ACH = [("streak", [3, 7, 14, 30, 60, 100, 200, 365], "%d-day streak"), ("checks", [10, 50, 100, 250, 500, 1000, 2500, 5000], "%d check-ins"),
+       ("perfect", [1, 7, 14, 30, 60, 100, 200], "%d perfect days"), ("pstreak", [3, 7, 14, 30, 60, 100], "%d perfect days in a row")]
+def ach_values(habits, logs, t, vac, ws):
+    days = day_summary(habits, logs, t, 1100, vac)
+    best = max([habit_stats(h, logs.get(h["id"], {}), t, vac, ws)["best"] for h in habits] or [0])
+    m = {d[0]: d for d in days}; ps = 0
+    for i in range(1100):
+        x = m.get((t - datetime.timedelta(days=i)).isoformat())
+        if not x: continue
+        if x[2] and x[1] == x[2]: ps += 1
+        elif i > 0: break
+    return {"streak": best, "checks": sum(d[1] for d in days), "perfect": sum(1 for d in days if d[2] and d[1] == d[2]), "pstreak": ps}
+def ach_reached(v): return {"%s:%d" % (k, x) for k, L, _ in ACH for x in L if v[k] >= x}
+def ach_check():
+    with pool.connection() as c:
+        habits, logs = load(c); vac, ws = prefs(c); r = c.execute("SELECT value FROM settings WHERE key='ach_seen'").fetchone()
+        now = ach_reached(ach_values(habits, logs, today(), vac, ws))
+        seen = set(json.loads(r[0])) if r else None
+        if seen is None or now - seen:       # first run only records what already exists
+            c.execute("INSERT INTO settings VALUES ('ach_seen',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (json.dumps(sorted(now | (seen or set()))),))
+    if seen is None: return
+    for key in sorted(now - seen, key=lambda k: (int(k.split(":")[1]))):
+        k, x = key.split(":"); label = [f for kk, _, f in ACH if kk == k][0] % int(x)
+        if int(x) == 1: label = label.replace("days", "day").replace("check-ins", "check-in")
+        push_all("Achievement unlocked", label, 0, "ach-" + key)
+
+# ---- the timer lives on the server: it keeps running (and logs the time) when the app is closed ----
+def phase(iv, el):
+    """el = elapsed seconds. -> (index, finished, focus seconds so far)  (same maths as tinfo() in index.html)"""
+    acc = focus = 0
+    for i, x in enumerate(iv):
+        ln = x["m"] * 60
+        if el < acc + ln: return i, False, focus + (el - acc if x["t"] == "f" else 0)
+        if x["t"] == "f": focus += ln
+        acc += ln
+    return max(len(iv) - 1, 0), True, focus
+
+def timer_row(c):
+    r = c.execute("SELECT t.habit_id,t.day,t.acc_ms,t.started,t.notif,t.goal_sent,h.name,h.goal,h.intervals FROM timer t JOIN habits h ON h.id=t.habit_id WHERE t.id=1").fetchone()
+    if not r: return None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    run = r[3] is not None
+    el = r[2] + (int((now - r[3]).total_seconds() * 1000) if run else 0)
+    return {"habit_id": r[0], "day": r[1], "acc_ms": r[2], "running": run, "elapsed_ms": el, "notif": r[4], "goal_sent": r[5], "name": r[6], "goal": r[7], "iv": json.loads(r[8]) if r[8] else []}
+
+def timer_public(t):
+    return None if not t else {"habit_id": t["habit_id"], "day": t["day"].isoformat(), "acc_ms": t["acc_ms"], "running": t["running"], "elapsed_ms": t["elapsed_ms"], "iv": t["iv"]}
+
+def timer_finish(c, t, manual):
+    """Add the focus minutes to the habit's day and remove the timer. Returns the minutes logged."""
+    el = t["elapsed_ms"] / 1000
+    focus = phase(t["iv"], el)[2] if t["iv"] else el
+    mins = round(focus / 60)
+    if manual and focus >= 30: mins = max(1, mins)
+    if mins > 0:
+        cur = c.execute("SELECT count FROM logs WHERE habit_id=%s AND day=%s", (t["habit_id"], t["day"])).fetchone()
+        n = min(9999, (cur[0] if cur else 0) + mins)
+        c.execute("INSERT INTO logs VALUES (%s,%s,%s,false) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count, skipped=false", (t["habit_id"], t["day"], n))
+    c.execute("DELETE FROM timer WHERE id=1")
+    return mins
+
+IVN = {"f": "Focus", "s": "Short break", "l": "Long break"}
+def timer_tick():
+    with pool.connection() as c:
+        t = timer_row(c)
+        if not t or not t["running"]: return
+        msgs = []
+        if t["iv"]:
+            i, fin, _ = phase(t["iv"], t["elapsed_ms"] / 1000)
+            if fin:
+                mins = timer_finish(c, t, False)
+                msgs.append((t["name"], "Timer finished · %d min logged" % mins, "t%d" % t["habit_id"]))
+            elif i > t["notif"]:
+                c.execute("UPDATE timer SET notif=%s WHERE id=1", (i,))
+                x = t["iv"][i]; msgs.append((t["name"], "%s · %d min" % (IVN[x["t"]], x["m"]), "t%d" % t["habit_id"]))
+        else:
+            left = t["goal"] - (c.execute("SELECT coalesce(max(count),0) FROM logs WHERE habit_id=%s AND day=%s", (t["habit_id"], t["day"])).fetchone()[0])
+            if not t["goal_sent"] and t["elapsed_ms"] / 60000 >= left > 0:
+                c.execute("UPDATE timer SET goal_sent=true WHERE id=1"); msgs.append((t["name"], "Goal reached · %d min" % t["goal"], "t%d" % t["habit_id"]))
+    for title, body, tag in msgs: push_all(title, body, 0, tag)
+    if any("finished" in m[1] for m in msgs): ach_check()
+
+class TimerIn(BaseModel): habit_id: int | None = None
+
+@app.post("/api/timer/start")
+def timer_start(b: TimerIn, req: Request):
+    need_auth(req)
+    with pool.connection() as c:
+        h = c.execute("SELECT kind FROM habits WHERE id=%s", (b.habit_id,)).fetchone()
+        if not h or h[0] != "timer": raise HTTPException(404, "no such timer habit")
+        t = timer_row(c)
+        if t and t["habit_id"] != b.habit_id: raise HTTPException(409, "another timer is running")
+        if t:
+            if not t["running"]: c.execute("UPDATE timer SET started=now() WHERE id=1")
+        else: c.execute("INSERT INTO timer (habit_id,day,started) VALUES (%s,%s,now())", (b.habit_id, today()))
+    return {"ok": True}
+
+@app.post("/api/timer/pause")
+def timer_pause(req: Request):
+    need_auth(req)
+    with pool.connection() as c:
+        t = timer_row(c)
+        if t and t["running"]: c.execute("UPDATE timer SET acc_ms=%s, started=NULL WHERE id=1", (t["elapsed_ms"],))
+    return {"ok": True}
+
+@app.post("/api/timer/stop")
+def timer_stop(req: Request):
+    need_auth(req)
+    with pool.connection() as c:
+        t = timer_row(c)
+        mins = timer_finish(c, t, True) if t else 0
+    try: ach_check()
+    except Exception as e: print("ach error", e)
+    return {"minutes": mins}
+
 async def push_loop():
+    n = 0
     while True:
-        try: await asyncio.to_thread(push_tick)
+        try:
+            await asyncio.to_thread(timer_tick)
+            if n % 15 == 0: await asyncio.to_thread(push_tick)
         except Exception as e: print("push error", e)
-        await asyncio.sleep(30)
+        n += 1
+        await asyncio.sleep(2)
 
 class SubIn(BaseModel): endpoint: str; p256dh: str; auth: str
 class EpIn(BaseModel): endpoint: str
@@ -343,6 +465,65 @@ def push_test(req: Request):
 
 @app.get("/sw.js")
 def sw(): return FileResponse("static/sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+# ---- export / import (a complete backup: every habit and every log) ----
+HCOLS = "id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind"
+@app.get("/api/export")
+def export(req: Request):
+    need_auth(req)
+    with pool.connection() as c:
+        hs = [dict(zip(HCOLS.split(","), r)) for r in c.execute("SELECT %s FROM habits ORDER BY position,id" % HCOLS).fetchall()]
+        lg = [[r[0], r[1].isoformat(), r[2], r[3]] for r in c.execute("SELECT habit_id,day,count,skipped FROM logs ORDER BY habit_id,day").fetchall()]
+        st = dict(c.execute("SELECT key,value FROM settings WHERE key IN ('vac','week_start','m_end','e_start')").fetchall())
+    for h in hs:
+        for k in ("created", "end_date"): h[k] = h[k].isoformat() if h[k] else None
+    return {"app": "habits", "version": 1, "exported": datetime.datetime.now(TZ).isoformat(timespec="seconds"), "habits": hs, "logs": lg, "settings": st}
+
+class ImportIn(BaseModel):
+    app: str; version: int; habits: list[dict]; logs: list[list]; settings: dict = {}
+
+@app.post("/api/import")
+def import_data(b: ImportIn, req: Request):
+    """Replace ALL habits and logs with the contents of an export file."""
+    need_auth(req)
+    if b.app != "habits" or b.version != 1: raise HTTPException(400, "this is not a Habits export file")
+    if len(b.habits) > 500 or len(b.logs) > 300000: raise HTTPException(400, "file is too large")
+    rows = []; ids = set()
+    for h in b.habits:
+        try:
+            hid = int(h["id"]); iv = h.get("intervals") or ""
+            m = HabitIn(name=h["name"], emoji=h.get("emoji") or "ic:check", color=h.get("color") or "#1e90ff", period=h.get("period") or "anytime", days=h.get("days") or "0123456",
+                        goal=int(h.get("goal") or 1), unit=h.get("unit") or "", description=h.get("description") or "", kind=h.get("kind") or "units", end_date=h.get("end_date"),
+                        repeat=h.get("repeat") or "daily", wk=int(h.get("wk") or 1), mdays=h.get("mdays") or "", intervals=json.loads(iv) if isinstance(iv, str) and iv else (iv if isinstance(iv, list) else []),
+                        remind=h.get("remind") or "")
+            if m.kind == "timer" and not m.intervals: m.goal = int(h.get("goal") or 1)
+            goal0 = m.goal; check(m)
+            if m.kind == "timer" and not m.intervals: m.goal = goal0
+            created = parse_day(h["created"]) if h.get("created") else today()
+            rows.append((hid, m, int(h.get("position") or hid), created))
+        except HTTPException as e: raise HTTPException(400, "habit %s: %s" % (h.get("name"), e.detail))
+        except Exception: raise HTTPException(400, "the file has a habit that cannot be read")
+        if hid in ids: raise HTTPException(400, "duplicate habit id")
+        ids.add(hid)
+    lrows = []
+    for l in b.logs:
+        try:
+            hid, d, cnt, sk = int(l[0]), parse_day(l[1]), int(l[2]), bool(l[3])
+        except Exception: raise HTTPException(400, "the file has a log that cannot be read")
+        if hid in ids and 0 <= cnt <= 9999: lrows.append((hid, d, cnt, sk))
+    with pool.connection() as c:
+        c.execute("DELETE FROM timer"); c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits")
+        for hid, m, pos, created in rows:
+            c.execute("INSERT INTO habits (id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                      (hid, m.name, m.emoji.strip(), m.color, m.period, m.days, m.goal, m.unit.strip(), pos, created, m.description, m.kind, end_of(m), m.repeat, m.wk, m.mdays, json.dumps(m.intervals) if m.intervals else "", m.remind or ""))
+        c.execute("SELECT setval(pg_get_serial_sequence('habits','id'), greatest(1, (SELECT coalesce(max(id),1) FROM habits)))")
+        with c.cursor() as cur: cur.executemany("INSERT INTO logs VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING", lrows)
+        c.execute("DELETE FROM settings WHERE key IN ('vac','week_start','m_end','e_start','ach_seen')")
+        for k in ("vac", "week_start", "m_end", "e_start"):
+            if k in b.settings and isinstance(b.settings[k], str): c.execute("INSERT INTO settings VALUES (%s,%s)", (k, b.settings[k]))
+    try: ach_check()
+    except Exception as e: print("ach error", e)
+    return {"habits": len(rows), "logs": len(lrows)}
 
 @app.get("/api/logs")
 def logs_range(req: Request, start: str, end: str, habit_id: int | None = None):
@@ -438,6 +619,8 @@ def log_set(b: LogIn, req: Request):
         if cnt == 0 and not sk: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (b.habit_id, d))
         else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,%s) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count, skipped=EXCLUDED.skipped",
                         (b.habit_id, d, cnt, sk))
+    try: ach_check()
+    except Exception as e: print("ach error", e)
     return {"count": cnt, "skipped": sk}
 
 @app.get("/health")

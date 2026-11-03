@@ -314,7 +314,7 @@ async function api(m,u,b){
   if(u==="/api/state"&&r.ok&&r.headers.get("X-Offline")!=="1"){const c=r.clone();c.json().then(j=>{if(j&&j.edit)try{localStorage.setItem(STKEY,JSON.stringify(j))}catch(e){}}).catch(()=>{})}
   if(r.status===401){S={edit:false};render();throw new Error("401")}
   if(!r.ok){let e="";try{e=(await r.json()).detail}catch(_){}throw new Error(e||r.status)}
-  return r.json();
+  const j=await r.json();if(u==="/api/state"&&r.headers.get("X-Offline")!=="1")tFromState(j);return j;
 }
 let newVer=false,firstLoad=true;
 if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",e=>{if(e.data==="updated")newVer=true});
@@ -443,9 +443,10 @@ function setPer(k){
   bindPanel();
 }
 const STOP='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="18.5" r="10"/><path d="M16 12.5v6.5l3.5 2.2M12.5 3.5h7M16 3.5v5M25 8.5l2.2 2.2"/></svg>';
-const TKEY="hbTimer";
-const tget=()=>{try{return JSON.parse(localStorage.getItem(TKEY))}catch(e){return null}};
-const tset=t=>t?localStorage.setItem(TKEY,JSON.stringify(t)):localStorage.removeItem(TKEY);
+let TM=null;   // the timer lives on the server (it keeps running and logs the time when the app is closed); this is its local copy
+const tget=()=>TM;
+function tFromState(j){const t=j&&j.timer;if(!t){TM=null;return}const now=Date.now();
+  TM={id:t.habit_id,day:t.day,acc:t.acc_ms,run:t.running,start:now-(t.elapsed_ms-t.acc_ms),iv:t.iv&&t.iv.length?t.iv:undefined}}
 const telapsed=t=>t?(t.acc+(t.run?Date.now()-t.start:0))/1000:0;
 const mmss=x=>{x=Math.floor(x);return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0")};
 function tinfo(t){
@@ -458,18 +459,17 @@ function tinfo(t){
 const IVN={f:"Focus",s:"Short Break",l:"Long Break"};
 const tdisp=t=>t.iv?mmss(tinfo(t).rem):mmss(telapsed(t));
 const tlabel=t=>{const i=tinfo(t);return`${IVN[i.type]} · ${i.i+1}/${t.iv.length}`};
-let tfin=false,tlast=null;
-async function tautofinish(t){
-  if(tfin)return;tfin=true;
-  try{const h=S.habits.find(x=>x.id===t.id),mins=Math.round(tinfo(t).focus/60);tset(null);
-    if(h&&mins>0){await api("POST","/api/log",{habit_id:t.id,day:t.day,count:lg(h,t.day)[0]+mins});ding();if(navigator.vibrate)navigator.vibrate([250,120,250])}
-    await refresh()}finally{tfin=false}
-}
-setInterval(()=>{const t=tget();if(!t)return;
+let tlast=null,tfinAt=0,wake=null;
+async function keepAwake(){   // screen stays on while a timer runs and the app is open (iPhone Home Screen app, iOS 16.4+)
+  try{const on=!!(TM&&TM.run)&&!document.hidden&&"wakeLock" in navigator;
+    if(on&&!wake){wake=await navigator.wakeLock.request("screen");wake.addEventListener("release",()=>{wake=null})}
+    else if(!on&&wake){await wake.release();wake=null}}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)keepAwake()});
+setInterval(()=>{const t=tget();keepAwake();if(!t)return;
   document.querySelectorAll(`[data-tt="${t.id}"]`).forEach(e=>{e.textContent=tdisp(t)});
   if(t.iv&&t.run){const i=tinfo(t);
     document.querySelectorAll(`[data-ts="${t.id}"]`).forEach(e=>{e.textContent=tlabel(t)});
-    if(i.fin){tautofinish(t);return}
+    if(i.fin){if(Date.now()-tfinAt>3000){tfinAt=Date.now();ding();if(navigator.vibrate)navigator.vibrate([250,120,250]);refresh().catch(()=>{})}return}   // the server logs it and clears the timer
     if(tlast!==null&&tlast!==i.i&&navigator.vibrate)navigator.vibrate(200);tlast=i.i}},1000);
 function card(h,d){
   const l=lg(h,d),dn=isDone(h,d),sk=l[1];
@@ -994,13 +994,11 @@ function timerSheet(){
   document.body.appendChild(ov);
   const close=()=>{sheet=null;ov.remove()};ov.onclick=e=>{if(e.target===ov)close()};$("#cl").onclick=close;
   const adjust=async(n)=>{n=Math.max(0,n);logs[h.id+"|"+S.today]=n?[n,false]:null;await api("POST","/api/log",{habit_id:h.id,day:S.today,count:n});await refresh()};
-  const st=$("#ts");if(st)st.onclick=()=>{if(other)return;if(!mine)tset({id:h.id,day:S.today,acc:0,start:Date.now(),run:true,iv:hiv?h.intervals:undefined});else{t.start=Date.now();t.run=true;tset(t)}render()};
-  const tp=$("#tp");if(tp)tp.onclick=()=>{t.acc+=Date.now()-t.start;t.run=false;tset(t);render()};
+  const tmsg=e=>{const er=$("#er");if(er)er.textContent=e.message==="409"||/another timer/.test(e.message)?"Another timer is running":e.message};
+  const st=$("#ts");if(st)st.onclick=async()=>{if(other)return;try{await api("POST","/api/timer/start",{habit_id:h.id});await refresh()}catch(e){tmsg(e)}};
+  const tp=$("#tp");if(tp)tp.onclick=async()=>{try{await api("POST","/api/timer/pause");await refresh()}catch(e){tmsg(e)}};
   const tx=$("#tx");if(tx)tx.onclick=async()=>{
-    const sec=t.iv?tinfo(t).focus:telapsed(t);let mins=Math.round(sec/60);if(sec>=30)mins=Math.max(1,mins);
-    tset(null);
-    if(mins>0){await adjust(lg(h,t.day)[0]+mins);return}
-    render();const er=$("#er");if(er)er.textContent="Under 30 seconds: nothing logged";
+    try{const r=await api("POST","/api/timer/stop");await refresh();if(!r.minutes){const er=$("#er");if(er)er.textContent="Under 30 seconds: nothing logged"}else ding()}catch(e){tmsg(e)}
   };
   $("#tm").onclick=()=>adjust(done-5);$("#tpl").onclick=()=>adjust(done+5);
 }
@@ -1026,7 +1024,7 @@ function settingsSheet(){
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
       <div class="sg">${tg2("sounds","snd","Sounds")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}${hasPin()?row("pinchg","lock","Change passcode"):""}</div>
-      <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("diag","note","Diagnostics")}</div><div class="sg">${row("export","tool","Export Data")}</div>
+      <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("diag","note","Diagnostics")}</div><div class="sg">${row("export","tool","Export Data")}${row("import","tool","Import Data")}</div>
       <div class="sg">${row("pw","lock","Change password")}<button class="srw" id="lo" style="color:#ff5c5c"><span>Sign out</span></button></div></div>`;
       $("#cl").onclick=close;
       $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});localStorage.removeItem(QKEY);localStorage.removeItem(STKEY);if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage("clear");close();S={edit:false};render()};
@@ -1048,7 +1046,14 @@ function settingsSheet(){
         PF_[k]=/^\d+$/.test(v)?+v:v;savePref();dirty=true;setPg="main";draw();if(k==="mEnd"||k==="eStart")api("POST","/api/prefs",k==="mEnd"?{m_end:PF_.mEnd}:{e_start:PF_.eStart}).then(()=>syncState()).catch(()=>{})});
       return;
     }
-    ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="pinchg"){pinCheck(()=>pinSet(()=>draw()));return}if(b.dataset.go==="ptest"){pushMsg="Sending…";draw();api("POST","/api/push/test").then(r=>{pushMsg=r.sent?"Sent. It should arrive in a moment.":"No device is subscribed yet: turn on Notifications first.";draw()}).catch(e=>{pushMsg=e.message;draw()});return}if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
+    ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="pinchg"){pinCheck(()=>pinSet(()=>draw()));return}if(b.dataset.go==="ptest"){pushMsg="Sending…";draw();api("POST","/api/push/test").then(r=>{pushMsg=r.sent?"Sent. It should arrive in a moment.":"No device is subscribed yet: turn on Notifications first.";draw()}).catch(e=>{pushMsg=e.message;draw()});return}if(b.dataset.go==="export"){fetch("/api/export").then(r=>r.ok?r.blob():Promise.reject()).then(bl=>{const u=URL.createObjectURL(bl),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}).catch(()=>alert("Could not export. Are you connected?"));return}
+      if(b.dataset.go==="import"){const f=document.createElement("input");f.type="file";f.accept="application/json,.json";
+        f.onchange=async()=>{const file=f.files[0];if(!file)return;let data;try{data=JSON.parse(await file.text())}catch(e){alert("That file is not a Habits export.");return}
+          if(!data||data.app!=="habits"||!Array.isArray(data.habits)){alert("That file is not a Habits export.");return}
+          if(!confirm(`Import ${data.habits.length} habits and ${(data.logs||[]).length} check-ins?\n\nThis REPLACES all your current habits and history.`))return;
+          if(!confirm("Are you sure? Your current data will be erased first."))return;
+          try{const r=await api("POST","/api/import",data);await syncState();logs={};for(const [h,d,c,sk] of S.logs)logs[h+"|"+d]=[c,sk];dirty=true;draw();alert(`Imported ${r.habits} habits and ${r.logs} check-ins.`)}catch(e){alert("Import failed: "+e.message)}};
+        f.click();return}setPg=b.dataset.go;draw()});
     ov.querySelectorAll("[data-t2]").forEach(b=>b.onclick=()=>{const k=b.dataset.t2;
       if(k==="pass"){const sw=b.querySelector(".swt");
         if(hasPin())pinCheck(()=>{localStorage.removeItem(PINKEY);sw.classList.remove("on");draw()});
