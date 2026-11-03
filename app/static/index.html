@@ -527,7 +527,7 @@ function bindSwipe(w){
   row.addEventListener("pointerup",end);row.addEventListener("pointercancel",end);
   row.addEventListener("click",e=>{if(Date.now()-swiped<350){e.stopPropagation();e.preventDefault()}},true);
 }
-const daysText=x=>{const r=x.repeat||"daily";if(r==="once")return"Once";if(r==="weekly")return`${x.wk||1}× per week`;if(r==="monthly")return"Monthly on "+(x.mdays||"").split(",").join(", ");return x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ")};
+const daysText=x=>{const r=x.repeat||"daily";if(x.sync==="trash")return"On collection days";if(r==="once")return"Once";if(r==="weekly")return`${x.wk||1}× per week`;if(r==="monthly")return"Monthly on "+(x.mdays||"").split(",").join(", ");return x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ")};
 const GRIP='<svg class="i" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
 function viewHabits(){
   let h=topbar("Habits");
@@ -930,7 +930,7 @@ function editPage(h,tpl,fromPicker){
       ${f.kind==="timer"?ivHtml:`<button class="gl" data-gl="1"><span>${esc(goalText(f))}</span>${CHR}</button>`}`:""}</div>
     <div class="cd"><button class="rw" data-tgl="tod"><span>${tod}</span>${CH}</button>
       ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button><button class="chip2 wide ${f.period==="chores"?"on":""}" data-p="chores">Chores</button></div>`:""}</div>
-    ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync count with</span></div><div class="seg">${[["","Off"],["pomodoro","Pomodoro"],["chinese","Mandarin"],["reading","Reading"]].map(([v,l])=>`<button class="${(f.sync||"")===v?"on":""}" data-sync="${v}">${l}</button>`).join("")}</div>${f.sync?`<p class="note" style="margin:0 16px 12px">${f.sync==="pomodoro"?"The count follows the pomodoros you finish on pomodoro.romijn.app.":f.sync==="reading"?"The count follows the minutes you read on reading.romijn.app.":"The count follows the minutes you study on chinese.romijn.app."}</p>`:""}</div>`:""}
+    ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync count with</span></div><div class="seg">${[["","Off"],["pomodoro","Pomodoro"],["chinese","Mandarin"],["reading","Reading"],["trash","Trash"]].map(([v,l])=>`<button class="${(f.sync||"")===v?"on":""}" data-sync="${v}">${l}</button>`).join("")}</div>${f.sync?`<p class="note" style="margin:0 16px 12px">${f.sync==="pomodoro"?"The count follows the pomodoros you finish on pomodoro.romijn.app.":f.sync==="reading"?"The count follows the minutes you read on reading.romijn.app.":f.sync==="trash"?"Due only on waste collection days, taken from Home Assistant.":"The count follows the minutes you study on chinese.romijn.app."}</p>`:""}</div>`:""}
     <div class="cd"><div class="rw"><span>Remind me at</span><button class="tg ${ui.rem?"on":""}" data-tg="rem" role="switch" aria-checked="${ui.rem}" aria-label="Remind me"></button></div>
       ${ui.rem?`<div class="hl"></div><div class="rw"><span>Time</span><input class="dt" type="time" id="rt" value="${f.remind||"09:00"}"></div>`:""}</div>
     <div class="err" id="er"></div>${h?`<button class="del" id="del">Delete habit</button>`:""}`;
