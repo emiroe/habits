@@ -343,9 +343,9 @@ function render(){
 function topbar(title,left){return `<div class="top"><span class="lt">${left||""}</span><h1>${title}</h1><span class="rt"><button class="ib" id="rf" aria-label="Refresh">${IC.refresh}</button><button class="ib" data-cog aria-label="Settings">${IC.cog}</button></span></div>`}
 const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"]];
 function panelHtml(d){
-  let h=S.vac?`<div class="vacb">Vacation mode is on · habits are paused</div>`:"";h+=`<div class="pf">`;
+  let h=`<div class="pf">`;
   for(const [k,l] of PF)h+=`<button class="${k===per?"on":""}" data-pf="${k}">${l}</button>`;
-  h+=`</div>`;
+  h+=`</div>`+(S.vac?`<div class="vacb">Vacation mode is on · habits are paused</div>`:"");
   const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime");
   if(!vis.length)h+=`<div class="empty">${EMPTYMSG}</div>`;
   for(const [k,l] of GROUPS){
@@ -538,6 +538,7 @@ async function tap(id){
   if(h.kind==="timer"){openTimer(id);return}
   await swipeSet(id,h.goal===1?(isDone(h,d)?0:1):(l[0]>=h.goal&&!l[1]?0:l[0]+1));
 }
+async function syncState(){const keep={...logs};S=await api("GET","/api/state");logs=keep;for(const [h,d,c,sk] of S.logs)logs[h+"|"+d]=[c,sk]}   // same as refresh() without redrawing
 async function refresh(){   // reload the server numbers (streaks, summary) without losing the page state
   const t=document.scrollingElement.scrollTop,s=sheet;const keepLogs={...logs};
   const st=await api("GET","/api/state");S=st;logs={...keepLogs};
@@ -904,13 +905,13 @@ function settingsSheet(){
       ov.innerHTML=`<div class="sheet big">${P[setPg]}</div>`;
       $("#bk").onclick=()=>{setPg="main";draw()};
       ov.querySelectorAll("[data-set]").forEach(b=>b.onclick=()=>{const k=b.dataset.set,v=b.dataset.v;
-        if(k==="wk"){setPg="main";api("POST","/api/prefs",{week_start:v==="Sunday"?6:0}).then(()=>refresh()).then(()=>{dirty=true;setPg="main";draw()}).catch(()=>{});return}
+        if(k==="wk"){setPg="main";api("POST","/api/prefs",{week_start:v==="Sunday"?6:0}).then(()=>syncState()).then(()=>{dirty=true;draw()}).catch(()=>{});return}
         PF_[k]=/^\d+$/.test(v)?+v:v;savePref();dirty=true;setPg="main";draw()});
       return;
     }
     ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
     ov.querySelectorAll("[data-t2]").forEach(b=>b.onclick=()=>{const k=b.dataset.t2;
-      if(k==="vac"){const on=!S.vac;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{vacation:on}).then(()=>refresh()).then(()=>{dirty=true;draw()}).catch(()=>{});return}
+      if(k==="vac"){const on=!S.vac;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{vacation:on}).then(()=>syncState()).then(()=>{dirty=true}).catch(()=>{});return}
       PF_[k]=!PF_[k];savePref();b.querySelector(".swt").classList.toggle("on",PF_[k]);dirty=true});
   };
   draw();
