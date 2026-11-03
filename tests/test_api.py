@@ -323,5 +323,6 @@ def test_cooling_after_done(c):
     L = {day(1): (1, False)}
     assert not main.cooling({**hs[0], "name": "Go to the gym", "repeat": "weekly", "wk": 1}, L, t)
     assert main.cooling({**hs[0], "name": "Call parents", "repeat": "weekly", "wk": 1}, L, t)
+    assert not main.cooling({**hs[0], "name": "Finish Chinese homework", "repeat": "weekly", "wk": 1, "sync": "homework"}, L, t)
     assert not main.cooling({**hs[0], "name": "Read", "repeat": "weekly", "wk": 3}, L, t)
     assert not main.cooling({**hs[0], "name": "Call parents", "repeat": "weekly", "wk": 1}, {day(5): (1, False)}, t)

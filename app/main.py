@@ -318,8 +318,8 @@ def push_all(title, body, badge=0, tag=None):
     return sent
 
 def cooling(h, hl, t):
-    """Rest period after doing it: a monthly habit stays off the list for 15 days, a once-a-week habit (not the gym) for 4 days. Days before today only."""
-    n = 15 if h["repeat"] == "month" else 4 if h["repeat"] == "weekly" and h["wk"] == 1 and "gym" not in h["name"].lower() else 0
+    """Rest period after doing it: a monthly habit stays off the list for 15 days, a once-a-week habit (not the gym or the homework) for 4 days. Days before today only."""
+    n = 15 if h["repeat"] == "month" else 4 if h["repeat"] == "weekly" and h["wk"] == 1 and "gym" not in h["name"].lower() and h.get("sync") != "homework" else 0
     return any(is_done(h, hl.get(t - datetime.timedelta(days=i))) for i in range(1, n + 1))
 
 def open_habits(habits, logs, t, vac, ws, parts):

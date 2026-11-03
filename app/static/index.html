@@ -345,7 +345,7 @@ const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return 
   if(r==="once")return d===h.created.slice(0,10);if(r==="weekly"||r==="month")return true;
   if(r==="monthly")return(h.mdays||"").split(",").includes(String(+d.slice(8)));return h.days.includes(String(wday(d)))};
 const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};
-const cool=(h,d)=>{const n=h.repeat==="month"?15:h.repeat==="weekly"&&h.wk===1&&!/gym/i.test(h.name)?4:0;for(let i=1;i<=n;i++)if(isDone(h,add(d,-i)))return true;return false};   // rest after doing it: month 15 days, once-a-week 4 days (not the gym)
+const cool=(h,d)=>{const n=h.repeat==="month"?15:h.repeat==="weekly"&&h.wk===1&&!/gym/i.test(h.name)&&h.sync!=="homework"?4:0;for(let i=1;i<=n;i++)if(isDone(h,add(d,-i)))return true;return false};   // rest after doing it: month 15 days, once-a-week 4 days (not the gym)
 const mDone=(h,d)=>{let n=0;for(let i=1;i<=31;i++)if(isDone(h,d.slice(0,8)+String(i).padStart(2,"0")))n++;return n};
 function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(d===S.today&&!l[0]&&!l[1]&&cool(h,d))return false;if(h.repeat==="weekly"&&(h.days||"").length===1&&!inVac(d)){const a=hmon(h,S.today);return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&[0,1,2,3,4,5,6].filter(i=>isDone(h,add(a,i))).length<h.wk)}
   if(h.repeat==="month"&&!inVac(d)){return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&mDone(h,d)<h.wk)}if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
