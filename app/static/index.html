@@ -32,7 +32,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .dy b{font-size:15px;font-weight:300;color:#e8e8ea}
 .dy.td span,.dy.td b{font-weight:800;color:#fff}
 .dy.sel{background:#343436}
-.dy.fut{opacity:.55;pointer-events:none}
+.dy.fut{opacity:.7}.panel.future .cnt,.panel.future .tmr{opacity:.5}
 .scene{display:block;width:calc(100% + 32px);height:150px;margin:6px -16px 0}
 .panel{background:var(--panel);margin:0 -16px;padding:0 16px 120px;min-height:calc(100vh - 330px)}
 /* scene: every body is always in the SVG and moves between day parts */
@@ -302,7 +302,7 @@ function render(){
   $("#new").onclick=()=>pickPage();
   if(tab==="today")bindToday();
   if(tab==="habits")bindHabits();
-  const st=$("#strip");if(st){st.scrollLeft=stripX==null?st.scrollWidth:stripX;st.onscroll=()=>{stripX=st.scrollLeft}}
+  const st=$("#strip");if(st){const sd=st.querySelector(".dy.sel");st.scrollLeft=stripX==null?(sd?sd.offsetLeft-st.clientWidth*.65:0):stripX;st.onscroll=()=>{stripX=st.scrollLeft}}
   const sh=$(".ov");if(sh)sh.remove();
   if(sheet)sheet();
 }
@@ -322,10 +322,10 @@ function panelHtml(d){
 }
 function viewToday(){
   const d=sel,from=add(S.today,-120);
-  const title=d===S.today?"Today":d===add(S.today,-1)?"Yesterday":dt(d).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});
+  const title=d===S.today?"Today":d===add(S.today,-1)?"Yesterday":d===add(S.today,1)?"Tomorrow":dt(d).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});
   let h=`<div class="sky">`+topbar(title,`<button class="ib" data-t="habits" aria-label="Habits">${IC.list}</button>`)+`<div class="strip" id="strip">`;
-  for(let i=0;i<=121;i++){const x=add(from,i);h+=`<button class="dy ${x===d?"sel":""} ${x===S.today?"td":""} ${x>S.today?"fut":""}" data-d="${x}"><span>${WD[wday(x)].slice(0,2)}</span><b>${+x.slice(8)}</b></button>`}
-  return h+`</div>${scene(per)}</div><div class="panel">${panelHtml(d)}</div>`;
+  for(let i=0;i<=181;i++){const x=add(from,i);h+=`<button class="dy ${x===d?"sel":""} ${x===S.today?"td":""} ${x>S.today?"fut":""}" data-d="${x}"><span>${WD[wday(x)].slice(0,2)}</span><b>${+x.slice(8)}</b></button>`}
+  return h+`</div>${scene(per)}</div><div class="panel ${d>S.today?"future":""}">${panelHtml(d)}</div>`;
 }
 // switching a day part updates the scene attribute in place (so the sun/moon animate) and only redraws the panel
 function setPer(k){
@@ -384,7 +384,7 @@ function card(h,d){
   <span class="nm"><b>${esc(h.name)}</b><small><i style="color:${h.color}">★</i>${sub}</small></span></button>${right}</div></div>`;
 }
 function bindToday(){
-  document.querySelectorAll(".dy").forEach(b=>b.onclick=()=>{if(b.dataset.d<=S.today)go(b.dataset.d)});
+  document.querySelectorAll(".dy").forEach(b=>b.onclick=()=>{go(b.dataset.d)});
   bindPanel();
 }
 function bindPanel(){
@@ -398,7 +398,7 @@ let swiped=0;
 function bindSwipe(w){
   const row=w.querySelector(".h"),id=+w.dataset.id,TH=90;
   let x0=0,y0=0,dx=0,mode=0,pid=null;      // mode 0 = undecided, 1 = swiping, -1 = scrolling
-  row.addEventListener("pointerdown",e=>{if(e.button>0)return;x0=e.clientX;y0=e.clientY;dx=0;mode=0;pid=e.pointerId;row.classList.remove("snap")});
+  row.addEventListener("pointerdown",e=>{if(e.button>0||sel>S.today)return;x0=e.clientX;y0=e.clientY;dx=0;mode=0;pid=e.pointerId;row.classList.remove("snap")});
   row.addEventListener("pointermove",e=>{
     if(e.pointerId!==pid)return;
     const ax=e.clientX-x0,ay=e.clientY-y0;
@@ -448,6 +448,7 @@ function confetti(el,col){
   }
 }
 async function setCount(h,d,n,opts){
+  if(d>S.today)return{p:Promise.resolve(),became:false};
   const c=Math.max(0,n),was=isDone(h,d);
   logs[h.id+"|"+d]=c||opts?.skipped?[c,!!opts?.skipped]:null;
   const body={habit_id:h.id,day:d,count:c};if(opts?.skipped!==undefined)body.skipped=opts.skipped;
@@ -464,6 +465,7 @@ async function swipeSet(id,n){
   const keep=sel;await refresh();sel=keep;
 }
 async function tap(id){
+  if(sel>S.today)return;
   const h=S.habits.find(x=>x.id===id),d=sel,l=lg(h,d);
   if(h.kind==="timer"){openTimer(id);return}
   await swipeSet(id,h.goal===1?(isDone(h,d)?0:1):(l[0]>=h.goal&&!l[1]?0:l[0]+1));
