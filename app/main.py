@@ -26,6 +26,7 @@ ALTER TABLE habits ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'daily'
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS wk int NOT NULL DEFAULT 1;
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS mdays text NOT NULL DEFAULT '';          -- monthly: comma separated dates, e.g. '1,15'
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS remind text NOT NULL DEFAULT '';           -- reminder time 'HH:MM' (push notification), empty = none
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS sync text NOT NULL DEFAULT '';             -- 'pomodoro' = count comes from the Pomodoro site
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS intervals text NOT NULL DEFAULT '';      -- timer: JSON [{"m":25,"t":"f"},{"m":5,"t":"s"}] f=focus s=short break l=long break
 CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
   count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
@@ -84,6 +85,7 @@ class HabitIn(BaseModel):
     description: str = ""; kind: str = "units"; end_date: str | None = None
     repeat: str = "daily"; wk: int = 1; mdays: str = ""; intervals: list[dict] = []
     remind: str | None = None          # 'HH:MM', '' = off, None = leave unchanged (updates only)
+    sync: str | None = None            # 'pomodoro' | '' | None = unchanged
 class LogIn(BaseModel):
     habit_id: int; day: str; count: int | None = None; skipped: bool | None = None
 class Order(BaseModel): ids: list[int]
@@ -186,8 +188,8 @@ def push_prefs(c):
 
 def load(c, only_active_ids=None):
     habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9],
-               "description": r[10], "kind": r[11], "end_date": r[12], "repeat": r[13], "wk": r[14], "mdays": r[15], "intervals": json.loads(r[16]) if r[16] else [], "remind": r[17]}
-              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind FROM habits ORDER BY position,id").fetchall()]
+               "description": r[10], "kind": r[11], "end_date": r[12], "repeat": r[13], "wk": r[14], "mdays": r[15], "intervals": json.loads(r[16]) if r[16] else [], "remind": r[17], "sync": r[18]}
+              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind,sync FROM habits ORDER BY position,id").fetchall()]
     logs = {}
     for hid, day, cnt, sk in c.execute("SELECT habit_id,day,count,skipped FROM logs").fetchall(): logs.setdefault(hid, {})[day] = (cnt, sk)
     return habits, logs
@@ -433,12 +435,39 @@ def timer_stop(req: Request):
     except Exception as e: print("ach error", e)
     return {"minutes": mins}
 
+# ---- sync with the Pomodoro site: a habit with sync='pomodoro' counts the pomodoros finished there (the site is the timer) ----
+POMODORO_URL = os.environ.get("POMODORO_URL", "https://pomodoro.romijn.app")
+def pomodoro_sync():
+    import urllib.request
+    with pool.connection() as c: hs = [r[0] for r in c.execute("SELECT id FROM habits WHERE sync='pomodoro'").fetchall()]
+    if not hs: return
+    d = json.load(urllib.request.urlopen(POMODORO_URL + "/api/state", timeout=10))
+    per = {}
+    for x in d.get("sessions", []):
+        if x.get("pomodoro"): per[x["day"]] = per.get(x["day"], 0) + 1
+    goal = int(d.get("settings", {}).get("daily_goal", 0))
+    t = today(); days = set(per) | {(t - datetime.timedelta(days=i)).isoformat() for i in range(35)}; changed = False
+    with pool.connection() as c:
+        for hid in hs:
+            if 1 <= goal <= 999: c.execute("UPDATE habits SET goal=%s WHERE id=%s AND goal<>%s", (goal, hid, goal))
+            cur = {r[0].isoformat(): (r[1], r[2]) for r in c.execute("SELECT day,count,skipped FROM logs WHERE habit_id=%s", (hid,)).fetchall()}
+            for day in days:
+                want = per.get(day, 0); have = cur.get(day, (0, False))
+                if have[1] or want == have[0] or day > t.isoformat(): continue
+                changed = True
+                if want == 0: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (hid, day))
+                else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,false) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count", (hid, day, want))
+    if changed: ach_check()
+
 async def push_loop():
     n = 0
     while True:
         try:
             await asyncio.to_thread(timer_tick)
             if n % 15 == 0: await asyncio.to_thread(push_tick)
+            if n % 30 == 0:
+                try: await asyncio.to_thread(pomodoro_sync)
+                except Exception as e: print("pomodoro sync error", e)
         except Exception as e: print("push error", e)
         n += 1
         await asyncio.sleep(2)
@@ -467,7 +496,7 @@ def push_test(req: Request):
 def sw(): return FileResponse("static/sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 # ---- export / import (a complete backup: every habit and every log) ----
-HCOLS = "id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind"
+HCOLS = "id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind,sync"
 @app.get("/api/export")
 def export(req: Request):
     need_auth(req)
@@ -495,7 +524,7 @@ def import_data(b: ImportIn, req: Request):
             m = HabitIn(name=h["name"], emoji=h.get("emoji") or "ic:check", color=h.get("color") or "#1e90ff", period=h.get("period") or "anytime", days=h.get("days") or "0123456",
                         goal=int(h.get("goal") or 1), unit=h.get("unit") or "", description=h.get("description") or "", kind=h.get("kind") or "units", end_date=h.get("end_date"),
                         repeat=h.get("repeat") or "daily", wk=int(h.get("wk") or 1), mdays=h.get("mdays") or "", intervals=json.loads(iv) if isinstance(iv, str) and iv else (iv if isinstance(iv, list) else []),
-                        remind=h.get("remind") or "")
+                        remind=h.get("remind") or "", sync=h.get("sync") or "")
             if m.kind == "timer" and not m.intervals: m.goal = int(h.get("goal") or 1)
             goal0 = m.goal; check(m)
             if m.kind == "timer" and not m.intervals: m.goal = goal0
@@ -514,8 +543,8 @@ def import_data(b: ImportIn, req: Request):
     with pool.connection() as c:
         c.execute("DELETE FROM timer"); c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits")
         for hid, m, pos, created in rows:
-            c.execute("INSERT INTO habits (id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                      (hid, m.name, m.emoji.strip(), m.color, m.period, m.days, m.goal, m.unit.strip(), pos, created, m.description, m.kind, end_of(m), m.repeat, m.wk, m.mdays, json.dumps(m.intervals) if m.intervals else "", m.remind or ""))
+            c.execute("INSERT INTO habits (id,name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind,sync) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                      (hid, m.name, m.emoji.strip(), m.color, m.period, m.days, m.goal, m.unit.strip(), pos, created, m.description, m.kind, end_of(m), m.repeat, m.wk, m.mdays, json.dumps(m.intervals) if m.intervals else "", m.remind or "", m.sync or ""))
         c.execute("SELECT setval(pg_get_serial_sequence('habits','id'), greatest(1, (SELECT coalesce(max(id),1) FROM habits)))")
         with c.cursor() as cur: cur.executemany("INSERT INTO logs VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING", lrows)
         c.execute("DELETE FROM settings WHERE key IN ('vac','week_start','m_end','e_start','ach_seen')")
@@ -562,6 +591,7 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
+    if b.sync not in (None, "", "pomodoro"): raise HTTPException(400, "bad sync")
     if b.remind:
         try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
         except Exception: raise HTTPException(400, "bad reminder time")
@@ -577,16 +607,16 @@ def habit_add(b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
         pos = c.execute("SELECT coalesce(max(position),0)+1 FROM habits").fetchone()[0]
-        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind or "")).fetchone()[0]
+        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created,description,kind,end_date,repeat,wk,mdays,intervals,remind,sync) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind or "", b.sync or "")).fetchone()[0]
     return {"id": i}
 
 @app.post("/api/habit/{hid}")
 def habit_update(hid: int, b: HabitIn, req: Request):
     need_auth(req); check(b)
     with pool.connection() as c:
-        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s,repeat=%s,wk=%s,mdays=%s,intervals=%s,remind=coalesce(%s,remind) WHERE id=%s",
-                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind, hid)).rowcount
+        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s,description=%s,kind=%s,end_date=%s,repeat=%s,wk=%s,mdays=%s,intervals=%s,remind=coalesce(%s,remind),sync=coalesce(%s,sync) WHERE id=%s",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), b.description, b.kind, end_of(b), b.repeat, b.wk, b.mdays, json.dumps(b.intervals) if b.intervals else "", b.remind, b.sync, hid)).rowcount
     if not n: raise HTTPException(404, "no such habit")
     return {"ok": True}
 

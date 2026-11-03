@@ -930,6 +930,7 @@ function editPage(h,tpl,fromPicker){
       ${f.kind==="timer"?ivHtml:`<button class="gl" data-gl="1"><span>${esc(goalText(f))}</span>${CHR}</button>`}`:""}</div>
     <div class="cd"><button class="rw" data-tgl="tod"><span>${tod}</span>${CH}</button>
       ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button></div>`:""}</div>
+    ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync with Pomodoro site</span><button class="tg ${f.sync==="pomodoro"?"on":""}" data-tg="sync" role="switch" aria-checked="${f.sync==="pomodoro"}" aria-label="Sync with Pomodoro"></button></div>${f.sync==="pomodoro"?`<p class="note" style="margin:0 16px 12px">The count follows the pomodoros you finish on pomodoro.romijn.app.</p>`:""}</div>`:""}
     <div class="cd"><div class="rw"><span>Remind me at</span><button class="tg ${ui.rem?"on":""}" data-tg="rem" role="switch" aria-checked="${ui.rem}" aria-label="Remind me"></button></div>
       ${ui.rem?`<div class="hl"></div><div class="rw"><span>Time</span><input class="dt" type="time" id="rt" value="${f.remind||"09:00"}"></div>`:""}</div>
     <div class="err" id="er"></div>${h?`<button class="del" id="del">Delete habit</button>`:""}`;
@@ -941,6 +942,7 @@ function editPage(h,tpl,fromPicker){
     else if(d.e){f.emoji=d.e;ui.pick=null;draw()}
     else if(d.c){f.color=d.c;ui.pick=null;draw()}
     else if(d.tgl){ui[d.tgl]=!ui[d.tgl];draw()}
+    else if(d.tg==="sync"){f.sync=f.sync==="pomodoro"?"":"pomodoro";draw()}
     else if(d.tg==="rem"){ui.rem=!ui.rem;if(ui.rem&&!f.remind)f.remind="09:00";draw();if(ui.rem)pushEnable().catch(()=>{})}
     else if(d.tg==="rep"){f.repOn=!f.repOn;draw()}
     else if(d.tg==="end"){ui.end=!ui.end;if(!ui.end)f.end_date=null;draw()}
@@ -975,7 +977,7 @@ function editPage(h,tpl,fromPicker){
     if(kind==="timer"&&!f.iv.some(x=>x.t==="f"))return er("Add at least one focus interval");
     const goal=kind==="timer"?Math.min(1440,ivGoal(f.iv)):(f.goalOn?f.goal:1);
     try{await api("POST",h?"/api/habit/"+h.id:"/api/habit",{name:f.name,description:f.description,emoji:f.emoji,color:f.color,period:f.period,days:f.days||"0123456",goal,
-      unit:kind==="timer"?"min":(f.goalOn?f.unit:""),kind,end_date:ui.end?f.end_date:null,repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,intervals:kind==="timer"?f.iv:[],remind:ui.rem?f.remind||"09:00":""});closePage(true);await refresh()}
+      unit:kind==="timer"?"min":(f.goalOn?f.unit:""),kind,end_date:ui.end?f.end_date:null,repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,intervals:kind==="timer"?f.iv:[],remind:ui.rem?f.remind||"09:00":"",sync:kind==="units"?(f.sync||""):""});closePage(true);await refresh()}
     catch(e){er(e.message)}
   };
   draw();openPage(el);

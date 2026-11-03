@@ -1,4 +1,4 @@
-import os, sys, datetime
+import os, sys, datetime, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 os.chdir(os.path.join(os.path.dirname(__file__), "..", "app"))
 from fastapi.testclient import TestClient
@@ -217,3 +217,19 @@ def test_achievement_push(c, monkeypatch):
     c.post("/api/log", json={"habit_id": a, "day": main.today().isoformat(), "count": 1})     # first perfect day + first check-in
     assert any("1 perfect day" in x[1] for x in sent), sent
     n = len(sent); c.post("/api/log", json={"habit_id": a, "day": main.today().isoformat(), "count": 1}); assert len(sent) == n   # not twice
+
+def test_pomodoro_sync(c, monkeypatch):
+    import io, urllib.request
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Focus on work", "unit": "pomodoros", "goal": 3, "sync": "pomodoro"}).json()["id"]
+    t = main.today(); y = t - datetime.timedelta(days=1)
+    sess = [{"day": t.isoformat(), "pomodoro": True}, {"day": t.isoformat(), "pomodoro": True}, {"day": t.isoformat(), "pomodoro": False}, {"day": y.isoformat(), "pomodoro": True}]
+    def fake(url, timeout=0): return io.BytesIO(json.dumps({"sessions": sess, "settings": {"daily_goal": 8}}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    main.pomodoro_sync()
+    s = c.get("/api/state").json(); h = s["habits"][0]
+    counts = {l[1]: l[2] for l in s["logs"] if l[0] == hid}; assert counts == {t.isoformat(): 2, y.isoformat(): 1} and h["goal"] == 8 and h["sync"] == "pomodoro"
+    sess.pop(0); main.pomodoro_sync()                                                           # a deleted session lowers the count
+    assert {l[1]: l[2] for l in c.get("/api/state").json()["logs"] if l[0] == hid}[t.isoformat()] == 1
+    c.post("/api/log", json={"habit_id": hid, "day": y.isoformat(), "skipped": True}); sess.clear(); main.pomodoro_sync()
+    assert any(l[1] == y.isoformat() and l[3] for l in c.get("/api/state").json()["logs"])      # skipped days are left alone
