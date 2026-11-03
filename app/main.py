@@ -226,7 +226,7 @@ def state(req: Request):
         out.append({**h, "created": h["created"].isoformat(), "end_date": h["end_date"].isoformat() if h["end_date"] else None, **st})
     recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
     return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t, 1100, vac), "vac": in_vac(t, vac),
-            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, "timer": tm, "trash": sorted(TRASH), **pp, "push_key": vapid()[1]}
+            "vac_periods": [[a.isoformat(), b.isoformat() if b else None] for a, b in vac], "week_start": ws, "timer": tm, "trash": sorted(TRASH), "ach": ach_list(*ach_values(habits, logs, t, vac, ws)), **pp, "push_key": vapid()[1]}
 
 class PrefsIn(BaseModel):
     vacation: bool | None = None
@@ -356,32 +356,69 @@ def push_tick(now=None):
             mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime", "chores"))
             if hs: push_all("%s · %d to do" % (part.capitalize(), len(hs)), ", ".join(h["name"] for h in hs[:6]) + (" …" if len(hs) > 6 else ""), len(hs), k)
 
-# ---- achievements (same milestones as the Awards page): a push when a new one is reached ----
-ACH = [("streak", [3, 7, 14, 30, 60, 100, 200, 365], "%d-day streak"), ("checks", [10, 50, 100, 250, 500, 1000, 2500, 5000], "%d check-ins"),
-       ("perfect", [1, 7, 14, 30, 60, 100, 200], "%d perfect days"), ("pstreak", [3, 7, 14, 30, 60, 100], "%d perfect days in a row")]
+# ---- achievements: general ones plus medals tied to specific habits (matched by name/sync). Same list for the Awards page and the pushes ----
+def _n(*w): return lambda h: any(x in h["name"].lower() for x in w)
+GEN = [("streak", "Streak Master", "flame", "days in a row", [3, 7, 14, 30, 60, 100, 200, 365]), ("checks", "Check-ins", "check", "check-ins", [10, 50, 100, 250, 500, 1000, 2500, 5000]),
+       ("perfect", "Perfect Days", "target", "perfect days", [1, 7, 14, 30, 60, 100, 200]), ("pstreak", "Perfect Streak", "trophy", "perfect days in a row", [3, 7, 14, 30, 60, 100])]
+# key, title, fallback icon, match, metric (best = best streak, days = days done, sum = summed count / div), div, tiers, unit
+SPEC = [("mandarin", "Mandarin", "globe", lambda h: h["sync"] == "chinese", "sum", 60, [5, 10, 25, 50, 100, 250, 500, 1000], "hours of Mandarin"),
+        ("homework", "Homework", "book", lambda h: h["sync"] == "homework", "days", 1, [1, 4, 10, 20, 40], "weeks of Chinese homework"),
+        ("focus", "Deep Focus", "tomato", lambda h: h["sync"] == "pomodoro", "sum", 1, [10, 50, 100, 250, 500, 1000], "pomodoros"),
+        ("reading", "Bookworm", "book", lambda h: h["sync"] == "reading", "sum", 60, [3, 10, 25, 50, 100, 200], "hours of reading"),
+        ("gym", "Iron Will", "dumbbell", _n("gym"), "days", 1, [5, 10, 25, 50, 100, 200], "workouts"),
+        ("dog", "Dog Walker", "run", _n("walk the dog"), "days", 1, [10, 50, 100, 250, 500, 1000], "walks with the dog"),
+        ("teeth", "Sparkling Smile", "tooth", _n("brush teeth"), "days", 1, [30, 100, 250, 500, 1000], "times brushed"),
+        ("candy", "Sweet Tooth Tamed", "heart", _n("no candy"), "best", 1, [3, 7, 14, 30, 60, 100], "days without candy"),
+        ("soda", "Soda Free", "cup", _n("no soda"), "best", 1, [3, 7, 14, 30, 60, 100], "days without soda"),
+        ("early", "Early Bird", "alarm", _n("wake up early"), "days", 1, [7, 30, 60, 100, 200, 365], "early mornings"),
+        ("budget", "Money Wise", "coin", _n("review budget", "spend money"), "days", 1, [10, 30, 100, 250, 500], "money check-ins"),
+        ("trash", "Trash Hero", "trash", lambda h: h["sync"] == "trash", "days", 1, [5, 10, 25, 50, 100], "times the trash went out"),
+        ("chores", "Clean Machine", "broom", lambda h: h["period"] == "chores" and h["sync"] != "trash", "days", 1, [10, 50, 100, 250, 500, 1000], "chores done"),
+        ("carly", "Carly's Caretaker", "bowl", _n("carly"), "days", 1, [10, 50, 100, 250, 500, 1000], "times caring for Carly"),
+        ("tummy", "Milou's Tummy Time", "heart", _n("tummy time"), "sum", 1, [30, 60, 150, 300, 600, 1200], "minutes of tummy time")]
 def ach_values(habits, logs, t, vac, ws):
-    days = day_summary(habits, logs, t, 1100, vac)
-    best = max([habit_stats(h, logs.get(h["id"], {}), t, vac, ws)["best"] for h in habits] or [0])
+    days = day_summary(habits, logs, t, 1100, vac); st = {h["id"]: habit_stats(h, logs.get(h["id"], {}), t, vac, ws) for h in habits}
     m = {d[0]: d for d in days}; ps = 0
     for i in range(1100):
         x = m.get((t - datetime.timedelta(days=i)).isoformat())
         if not x: continue
         if x[2] and x[1] == x[2]: ps += 1
         elif i > 0: break
-    return {"streak": best, "checks": sum(d[1] for d in days), "perfect": sum(1 for d in days if d[2] and d[1] == d[2]), "pstreak": ps}
-def ach_reached(v): return {"%s:%d" % (k, x) for k, L, _ in ACH for x in L if v[k] >= x}
+    v = {"streak": max([s["best"] for s in st.values()] or [0]), "checks": sum(d[1] for d in days), "perfect": sum(1 for d in days if d[2] and d[1] == d[2]), "pstreak": ps}
+    icon = {}
+    for k, _, ic, f, met, div, _, _ in SPEC:
+        hs = [h for h in habits if f(h)]
+        if not hs: continue
+        icon[k] = hs[0]["emoji"][3:] if hs[0]["emoji"].startswith("ic:") else ic
+        if met == "best": v[k] = max(st[h["id"]]["best"] for h in hs)
+        elif met == "days": v[k] = sum(1 for h in hs for d, l in logs.get(h["id"], {}).items() if is_done(h, l))
+        else: v[k] = sum(l[0] for h in hs for d, l in logs.get(h["id"], {}).items() if not l[1]) // div
+    return v, icon
+def ach_list(v, icon):
+    out = [{"k": k, "title": t, "icon": ic, "unit": u, "tiers": L, "v": v[k]} for k, t, ic, u, L in GEN]
+    out += [{"k": k, "title": t, "icon": icon[k], "unit": u, "tiers": L, "v": v[k]} for k, t, _, _, _, _, L, u in SPEC if k in v]
+    return out
+def ach_reached(v): return {"%s:%d" % (a["k"], x) for a in ach_list(v, {k: "" for k in v}) for x in a["tiers"] if a["v"] >= x}
+def ach_label(k, x, icon={}):
+    a = [a for a in ach_list({kk: 0 for kk in [g[0] for g in GEN] + [s[0] for s in SPEC]}, {s[0]: "" for s in SPEC}) if a["k"] == k][0]
+    u = a["unit"]
+    if x == 1: w = u.split(); w[0] = w[0].rstrip("s"); u = " ".join(w)
+    return "%d %s" % (x, u)
 def ach_check():
     with pool.connection() as c:
         habits, logs = load(c); vac, ws = prefs(c); r = c.execute("SELECT value FROM settings WHERE key='ach_seen'").fetchone()
-        now = ach_reached(ach_values(habits, logs, today(), vac, ws))
+        v2 = c.execute("SELECT 1 FROM settings WHERE key='ach_v2'").fetchone()
+        now = ach_reached(ach_values(habits, logs, today(), vac, ws)[0])
         seen = set(json.loads(r[0])) if r else None
+        if not v2:        # the new habit-specific medals: record what already exists without a push
+            c.execute("INSERT INTO settings VALUES ('ach_v2','1') ON CONFLICT (key) DO NOTHING")
+            c.execute("INSERT INTO settings VALUES ('ach_seen',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (json.dumps(sorted(now | (seen or set()))),))
+            return
         if seen is None or now - seen:       # first run only records what already exists
             c.execute("INSERT INTO settings VALUES ('ach_seen',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (json.dumps(sorted(now | (seen or set()))),))
     if seen is None: return
     for key in sorted(now - seen, key=lambda k: (int(k.split(":")[1]))):
-        k, x = key.split(":"); label = [f for kk, _, f in ACH if kk == k][0] % int(x)
-        if int(x) == 1: label = label.replace("days", "day").replace("check-ins", "check-in")
-        push_all("Achievement unlocked", label, 0, "ach-" + key)
+        k, x = key.split(":"); push_all("Achievement unlocked", ach_label(k, int(x)), 0, "ach-" + key)
 
 # ---- the timer lives on the server: it keeps running (and logs the time) when the app is closed ----
 def phase(iv, el):

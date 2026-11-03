@@ -300,3 +300,13 @@ def test_homework_sync_and_own_week(c, monkeypatch):
     main.tracker_sync()
     s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [1]
     assert main.hws({"repeat": "weekly", "days": "2"}, 0) == 2 and main.hws({"repeat": "weekly", "days": "0123456"}, 0) == 0
+
+
+def test_achievements_specific(c):
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Learn Mandarin", "unit": "min", "goal": 120, "sync": "chinese"}).json()["id"]
+    c.post("/api/habit", json={"name": "Intimacy with Shuang", "goal": 1})
+    a = {x["k"]: x for x in c.get("/api/state").json()["ach"]}
+    assert {"streak", "checks", "perfect", "pstreak", "mandarin"} <= set(a) and "focus" not in a
+    assert a["mandarin"]["tiers"][0] == 5 and a["mandarin"]["icon"] and a["mandarin"]["v"] == 0
+    main.ach_check()

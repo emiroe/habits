@@ -94,7 +94,7 @@ nav .tab.on{color:var(--ac)}
 nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;background:var(--ac);color:#fff;font-size:34px;font-weight:300;line-height:1;margin-top:-38px;box-shadow:0 0 0 10px var(--nav)}
 
 /* top bar extras */
-.achs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:0 0 8px}.achs+.grp,.top+.tiles+.grp{margin-top:6px}.ach .bd{width:38px!important;height:38px!important;margin-bottom:2px!important}.ach .bd svg{width:20px!important;height:20px!important}.ach b{font-size:11px!important}.ach{text-align:center;opacity:.45}.ach.on{opacity:1}.ach .bd{width:54px;height:54px;border-radius:50%;background:var(--card);margin:0 auto 4px;display:grid;place-items:center}.ach .bd svg{width:26px;height:26px}.ach b{font-size:13px}
+.achs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 4px;margin:0 0 14px}.ach{text-align:center;opacity:.9}.ach:not(.on){opacity:.55}.ach .md{width:100%;max-width:78px;display:block;margin:0 auto 2px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25))}.ach b{font-size:14px;font-weight:800}.ah{display:flex;justify-content:space-between;align-items:baseline;margin:16px 2px 6px}.ah b{font-size:16px}.ah span{font-size:12px;color:var(--mut,#8a8f98)}.ap{height:5px;border-radius:3px;background:rgba(128,128,128,.2);margin:0 2px 10px;overflow:hidden}.ap i{display:block;height:100%;background:#e4c56a;border-radius:3px}
 .ov:has(.sheet.big){animation:none;background:#262628}.sheet.big{animation:none!important;height:100%;max-height:none;border-radius:0;overflow:auto;background:#262628;padding-top:calc(16px + env(safe-area-inset-top))}.sheet.big h2{text-align:center;position:relative;margin:2px 0 14px}.sheet.big h2 .x,.sheet.big h2 .bk{position:absolute;left:0;top:0}.sheet.big h2 .x{left:auto;right:0}
 .sheet.big h2.sh{display:flex;align-items:center;justify-content:center;padding:0 36px;min-height:32px;text-align:center}.sheet.big h2.sh .bk{width:32px;height:32px;align-items:center;justify-content:flex-start}.sh .bk{display:flex}.sh .bk svg{width:22px;height:22px}.sg{background:#333335;border-radius:18px;margin:0 0 12px;overflow:hidden}.sc{margin:0 0 12px}.sc .sg,.sc .srw{border-radius:18px}.sc .srw{background:#333335}.sc p{margin:6px 6px 0;color:#8c8c92;font-size:12.500px;font-weight:300}
 .srw{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;font-size:17px;text-align:left}.sg .srw+.srw{border-top:1px solid #3d3d40}.srw .si{width:24px;height:24px;flex:none}.srw span{flex:1}.srw em{font-style:normal;color:#8c8c92;font-size:15px}.srw .chv{width:16px;height:16px;color:#8c8c92}.ck{color:var(--ac)}
@@ -1077,20 +1077,24 @@ function settingsSheet(){
 }
 /* ---------- stats ---------- */
 const HM10=["#d8ec84","#c2e070","#aad45f","#92c850","#7ab943","#62a838","#4c962f","#388427","#2a731f","#1f6318"];   // same 10 greens as the Chinese tracker heat map
+function medal(ic,ok,n){
+  const pts=[];for(let i=0;i<64;i++){const a=i/64*Math.PI*2,r=44+2.6*Math.cos(a*16);pts.push((50+r*Math.sin(a)).toFixed(1)+","+(50-r*Math.cos(a)).toFixed(1))}
+  let rays="";for(let i=0;i<24;i++){const a=i/24*Math.PI*2;rays+=`<line x1="${(50+10*Math.sin(a)).toFixed(1)}" y1="${(50-10*Math.cos(a)).toFixed(1)}" x2="${(50+33*Math.sin(a)).toFixed(1)}" y2="${(50-33*Math.cos(a)).toFixed(1)}"/>`}
+  const g=ok?"G":"S";
+  return `<svg class="md" viewBox="0 0 100 100"><polygon points="${pts.join(" ")}" fill="url(#m${g}o)"/><circle cx="50" cy="50" r="37" fill="url(#m${g}i)" stroke="${ok?"#c9a24a":"#a3a9b1"}" stroke-width="1.6"/><g stroke="${ok?"#fff6d0":"#eef0f3"}" stroke-width=".7" opacity=".45">${rays}</g>
+  <svg x="27" y="27" width="46" height="46" viewBox="0 0 24 24" style="color:${ok?"#fff3c2":"#e2e5e9"};overflow:visible"><g class="ic" style="width:auto;height:auto;filter:drop-shadow(0 1.2px 0 ${ok?"#a8812f":"#8d939b"})">${HI[ic]||HI.trophy}</g></svg></svg>`}
 function viewAch(){
-  const hs=S.habits||[],days=S.days||[];
-  const checks=days.reduce((a,x)=>a+x[1],0),perfect=days.filter(x=>x[1]&&x[1]===x[2]).length;
-  const best=Math.max(0,...hs.map(x=>x.best||0)),cur=Math.max(0,...hs.map(x=>x.streak||0));
-  const map=Object.fromEntries(days.map(x=>[x[0],x]));let ps=0;for(let i=0;i<400;i++){const x=map[add(S.today,-i)];if(!x)continue;if(x[2]&&x[1]===x[2])ps++;else if(i>0)break}
-  const B=[["flame","#ff8a3c","Streak",best,[3,7,14,30,60,100,200,365],"days in a row"],["check","#2ecc71","Check-ins",checks,[10,50,100,250,500,1000,2500,5000],"check-ins"],["target","#1e90ff","Perfect days",perfect,[1,7,14,30,60,100,200],"perfect days"],["trophy","#f5b700","Perfect streak",ps,[3,7,14,30,60,100],"perfect days in a row"]];
-  let h=topbar("Achievements"),n=0,t=0;
-  for(const [ic,c,nm,v,L,u] of B){
-    h+=`<div class="grp" style="text-align:left;margin:8px 2px 6px">${nm}</div><div class="achs">`;
-    for(const m of L){const ok=Math.max(v,nm==="Streak"?cur:0)>=m;t++;if(ok)n++;
-      h+=`<div class="ach ${ok?"on":""}" data-tip="${ok?"Reached":"Locked"}: ${m} ${u}"><div class="bd" style="${ok?"background:"+hex(c,.2)+";":""}">${ico({emoji:"ic:"+ic,color:ok?c:"#6b7280"})}</div><b>${m}</b></div>`}
+  const A=S.ach||[];let h=topbar("Achievements"),n=0,t=0;
+  h+=`<svg width="0" height="0" style="position:absolute"><defs><linearGradient id="mGo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3dc8a"/><stop offset=".5" stop-color="#e4c56a"/><stop offset="1" stop-color="#c9a24a"/></linearGradient><radialGradient id="mGi" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#e8c96c"/><stop offset="1" stop-color="#c39a3e"/></radialGradient><linearGradient id="mSo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9dde2"/><stop offset="1" stop-color="#b3b9c1"/></linearGradient><radialGradient id="mSi" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#c9ced4"/><stop offset="1" stop-color="#9ea5ae"/></radialGradient></defs></svg>`;
+  for(const a of A){
+    const nx=a.tiers.find(m=>a.v<m),got=a.tiers.filter(m=>a.v>=m).length;t+=a.tiers.length;n+=got;
+    h+=`<div class="ah"><b>${esc(a.title)}</b><span>${nx?a.v+" / "+nx+" "+esc(a.unit):a.v+" "+esc(a.unit)+" · all done"}</span></div>${nx?`<div class="ap"><i style="width:${Math.round(100*a.v/nx)}%"></i></div>`:""}<div class="achs">`;
+    for(const m of a.tiers){const ok=a.v>=m;
+      h+=`<div class="ach ${ok?"on":""}" data-tip="${ok?"Reached":"Locked"}: ${m} ${esc(a.unit)}">${medal(a.icon,ok)}<b>${m}</b></div>`}
     h+=`</div>`}
   const Tl=(k,c,v,l)=>`<div class="tile"><b>${ico({emoji:"ic:"+k,color:c})}${v}</b><span>${l}</span></div>`;
-  return h.replace(topbar("Achievements"),topbar("Achievements")+`<div class="tiles">${Tl("trophy","#f5b700",n+"/"+t,"Unlocked")}${Tl("flame","#ff8a3c",best,"Best streak")}${Tl("check","#2ecc71",checks,"Check-ins")}${Tl("target","#1e90ff",perfect,"Perfect")}</div>`);
+  const g=k=>(A.find(x=>x.k===k)||{v:0}).v;
+  return h.replace(topbar("Achievements"),topbar("Achievements")+`<div class="tiles">${Tl("trophy","#f5b700",n+"/"+t,"Unlocked")}${Tl("flame","#ff8a3c",g("streak"),"Best streak")}${Tl("check","#2ecc71",g("checks"),"Check-ins")}${Tl("target","#1e90ff",g("perfect"),"Perfect")}</div>`);
 }
 function viewStats(){
   const days=S.days,map=Object.fromEntries(days.map(x=>[x[0],x]));
