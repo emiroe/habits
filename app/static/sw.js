@@ -1,4 +1,4 @@
-const CACHE = "hb-v1";
+const CACHE = "hb-v2";
 const PRE = ["/", "/static/fonts/Raleway.ttf", "/static/icons/icon-192.png", "/static/icons/icon-512.png", "/static/icons/apple-touch-icon.png", "/static/icons/favicon.svg"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(PRE.map(u => c.add(u).catch(() => {}))))) });
 self.addEventListener("activate", e => e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k); await self.clients.claim() })()));
@@ -13,10 +13,15 @@ self.addEventListener("fetch", e => {
   if (r.mode === "navigate" || u.pathname === "/" || api) { e.respondWith(networkFirst(r, r.mode === "navigate" ? "/" : null, api)); return }
   if (u.pathname.startsWith("/static/") || u.pathname === "/manifest.webmanifest") e.respondWith(staleWhileRevalidate(r));
 });
+// A dead connection (VPN dropped, no signal) often does not fail, it just hangs: give up after a few seconds and use the cache.
+function fetchT(r, ms) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
+  return fetch(r, { signal: ac.signal }).finally(() => clearTimeout(t));
+}
 async function networkFirst(r, key, api) {
   const c = await caches.open(CACHE), k = key || r;
   try {
-    const res = await fetch(r);
+    const res = await fetchT(r, 3000);
     if (res.ok) { c.put(k, res.clone()); return res }
     if (res.status < 500) return res;
     throw new Error("server error");        // 502/503/504 from the proxy = server down: use the cache like offline

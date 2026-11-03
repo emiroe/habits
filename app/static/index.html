@@ -277,12 +277,17 @@ function applyQueue(){for(const q of getQ())logs[q.habit_id+"|"+q.day]=q.count||
 async function flushQ(){
   if(flushing||!getQ().length||!S||!S.edit)return;flushing=true;let did=false;
   try{while(getQ().length){const q=getQ()[0];let r;
-    try{r=await fetch("/api/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(q)})}catch(e){break}
+    const ac=new AbortController(),to=setTimeout(()=>ac.abort(),8000);try{r=await fetch("/api/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(q),signal:ac.signal});clearTimeout(to)}catch(e){clearTimeout(to);break}
     if(r.status===401||r.status>=500)break;
     setQ(getQ().slice(1));did=true}}finally{flushing=false}
   if(did&&!getQ().length){offline=false;updateOff();try{await refresh()}catch(e){}}}
 window.addEventListener("online",()=>flushQ());window.addEventListener("offline",()=>{offline=true;updateOff()});
 setInterval(flushQ,20000);
+async function ping(){   // while offline, check every few seconds whether the server is back
+  if(!offline||!S||!S.edit)return;
+  try{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),2500);const r=await fetch("/health",{cache:"no-store",signal:ac.signal});clearTimeout(t);if(!r.ok)return}catch(e){return}
+  offline=false;updateOff();await flushQ();if(!getQ().length&&!sheet&&!document.querySelector(".pg"))try{await refresh()}catch(e){}}
+setInterval(ping,6000);
 const STKEY="hbState";
 function stateCopy(){   // server unreachable: the last state we saw (kept in localStorage, also when the service worker has nothing)
   let st=null;try{st=JSON.parse(localStorage.getItem(STKEY)||"null")}catch(e){}
@@ -294,8 +299,10 @@ function netFail(m,u,b){   // no connection, or the proxy says the server is dow
   updateOff();throw new Error("You are offline")}
 async function api(m,u,b){
   let r;
-  try{r=await fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined})}
-  catch(e){if(m==="GET"&&u==="/api/state")return stateCopy();return netFail(m,u,b)}
+  if(navigator.onLine===false){if(m==="GET"&&u==="/api/state")return stateCopy();return netFail(m,u,b)}      // airplane mode: no waiting
+  const ac=new AbortController(),to=setTimeout(()=>ac.abort(),offline?2500:u==="/api/state"?7000:u==="/api/log"?8000:30000);   // a hanging connection counts as offline   // a hanging connection counts as offline
+  try{r=await fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined,signal:ac.signal});clearTimeout(to)}
+  catch(e){clearTimeout(to);if(m==="GET"&&u==="/api/state")return stateCopy();return netFail(m,u,b)}
   if(r.status>=502&&r.status<=504&&u==="/api/state")return stateCopy();
   if(r.status>=502&&r.status<=504&&!u.startsWith("/api/logs"))return netFail(m,u,b)
   if(u==="/api/state"||u.startsWith("/api/logs")){offline=r.headers.get("X-Offline")==="1";updateOff()}
@@ -317,7 +324,7 @@ async function load(){
 async function ensureLogs(day){   // older than the state's window: fetch that week
   if(day>=loaded)return;
   const a=mon(day),b=add(a,6);
-  const r=await api("GET",`/api/logs?start=${a}&end=${b}`);
+  let r;try{r=await api("GET",`/api/logs?start=${a}&end=${b}`)}catch(e){return}      // offline: show what we have
   for(const [h,d,c,s] of r.logs)logs[h+"|"+d]=[c,s];
   for(const h of S.habits)for(let i=0;i<7;i++)if(!logs[h.id+"|"+add(a,i)])logs[h.id+"|"+add(a,i)]=null;
 }
@@ -660,8 +667,9 @@ let dId=null,dMonth=null,dLogs={},dShown=false;
 async function openDetail(id){
   dId=id;dMonth=sel.slice(0,7);dLogs={};dShown=false;
   const h=S.habits.find(x=>x.id===id);
-  const r=await api("GET",`/api/logs?start=${add(S.today,-399)}&end=${S.today}&habit_id=${id}`);
-  for(const [,d,c,s] of r.logs)dLogs[d]=[c,s];
+  try{const r=await api("GET",`/api/logs?start=${add(S.today,-399)}&end=${S.today}&habit_id=${id}`);
+    for(const [,d,c,s] of r.logs)dLogs[d]=[c,s]}
+  catch(e){for(const k in logs){const [hid,d]=k.split("|");if(+hid===id&&logs[k])dLogs[d]=logs[k]}}      // offline: the last 90 days we already have
   sheet=detailSheet;render();
 }
 function detailSheet(){
