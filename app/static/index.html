@@ -87,13 +87,14 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .mg .mv button{color:var(--dim);font-size:15px;padding:4px 8px}
 /* tab bar */
 nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
-nav div{max-width:520px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 84px 1fr 1fr;align-items:center}
+nav div{max-width:520px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px minmax(0,1fr) minmax(0,1fr);align-items:center}
 nav .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:300;color:#8c8c92;padding:2px 0}
+nav .tab{white-space:nowrap}nav .tab:last-child{font-size:11px;letter-spacing:-.3px}
 nav .tab.on{color:var(--ac)}
 nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;background:var(--ac);color:#fff;font-size:34px;font-weight:300;line-height:1;margin-top:-38px;box-shadow:0 0 0 10px var(--nav)}
 
 /* top bar extras */
-.achs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 14px}.ach{text-align:center;opacity:.45}.ach.on{opacity:1}.ach .bd{width:54px;height:54px;border-radius:50%;background:var(--card);margin:0 auto 4px;display:grid;place-items:center}.ach .bd svg{width:26px;height:26px}.ach b{font-size:13px}
+.achs{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:0 0 8px}.achs+.grp,.top+.tiles+.grp{margin-top:6px}.ach .bd{width:38px!important;height:38px!important;margin-bottom:2px!important}.ach .bd svg{width:20px!important;height:20px!important}.ach b{font-size:11px!important}.ach{text-align:center;opacity:.45}.ach.on{opacity:1}.ach .bd{width:54px;height:54px;border-radius:50%;background:var(--card);margin:0 auto 4px;display:grid;place-items:center}.ach .bd svg{width:26px;height:26px}.ach b{font-size:13px}
 .top .lt{width:80px;display:flex}.top .rt{width:80px;display:flex;justify-content:flex-end}
 .ib.spin svg{animation:spin .6s linear}@keyframes spin{to{transform:rotate(360deg)}}
 /* timer habits */
@@ -252,7 +253,7 @@ async function load(){
   if(!S.edit){render();return}
   sel=sel||S.today;
   try{const n=JSON.parse(sessionStorage.getItem("hbNav")||"null");sessionStorage.removeItem("hbNav");   // refresh button: come back to the same page
-    if(n){if(["today","habits","stats"].includes(n.tab))tab=n.tab;if(["all","morning","afternoon","evening"].includes(n.per))per=n.per;if(/^\d{4}-\d\d-\d\d$/.test(n.sel)&&n.sel>=S.logs_from)sel=n.sel}}catch(e){}
+    if(n){if(["today","habits","stats","ach"].includes(n.tab))tab=n.tab;if(["all","morning","afternoon","evening"].includes(n.per))per=n.per;if(/^\d{4}-\d\d-\d\d$/.test(n.sel)&&n.sel>=S.logs_from)sel=n.sel}}catch(e){}
   logs={};for(const [h,d,c,s] of S.logs)logs[h+"|"+d]=[c,s];
   loaded=S.logs_from;
   render();
@@ -879,7 +880,7 @@ function viewAch(){
   const B=[["flame","#ff8a3c","Streak",best,[3,7,14,30,60,100,200,365],"days in a row"],["check","#2ecc71","Check-ins",checks,[10,50,100,250,500,1000,2500,5000],"check-ins"],["target","#1e90ff","Perfect days",perfect,[1,7,14,30,60,100,200],"perfect days"],["trophy","#f5b700","Perfect streak",ps,[3,7,14,30,60,100],"perfect days in a row"]];
   let h=topbar("Achievements"),n=0,t=0;
   for(const [ic,c,nm,v,L,u] of B){
-    h+=`<div class="grp">${nm}</div><div class="achs">`;
+    h+=`<div class="grp" style="text-align:left;margin:8px 2px 6px">${nm}</div><div class="achs">`;
     for(const m of L){const ok=Math.max(v,nm==="Streak"?cur:0)>=m;t++;if(ok)n++;
       h+=`<div class="ach ${ok?"on":""}" data-tip="${ok?"Reached":"Locked"}: ${m} ${u}"><div class="bd" style="${ok?"background:"+hex(c,.2)+";":""}">${ico({emoji:"ic:"+ic,color:ok?c:"#6b7280"})}</div><b>${m}</b></div>`}
     h+=`</div>`}
