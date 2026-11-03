@@ -315,7 +315,7 @@ function panelHtml(d){
   const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime");
   if(!vis.length)h+=`<div class="empty">${EMPTYMSG}</div>`;
   for(const [k,l] of GROUPS){
-    const hs=vis.filter(x=>x.period===k);if(!hs.length)continue;
+    const rk=x=>lg(x,d)[1]?2:isDone(x,d)?1:0,hs=vis.filter(x=>x.period===k).sort((a,b)=>rk(a)-rk(b));if(!hs.length)continue;
     h+=`<div class="grp">${l}</div>`;for(const x of hs)h+=card(x,d);
   }
   return h;
