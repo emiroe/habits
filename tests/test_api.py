@@ -141,3 +141,11 @@ def test_prefs_api(c):
     s = c.get("/api/state").json(); assert s["vac"] is True and s["week_start"] == 6 and len(s["vac_periods"]) == 1
     assert c.post("/api/prefs", json={"vacation": False}).status_code == 200
     s = c.get("/api/state").json(); assert s["vac"] is False and s["vac_periods"] == []
+
+def test_weekly_partial_vacation():
+    w = H(repeat="weekly", wk=3, created=D(2026, 10, 1))
+    wl = {D(2026, 10, 19): (1, False), D(2026, 10, 20): (1, False)}                    # week of 19 Oct: 2 of 3 done
+    t = D(2026, 10, 28)
+    assert main.habit_stats(w, wl, t)["streak"] == 0                                    # missed the goal
+    vac = [(D(2026, 10, 21), D(2026, 10, 25))]                                          # only 2 days left that week: goal becomes 2
+    assert main.habit_stats(w, wl, t, vac)["streak"] == 1

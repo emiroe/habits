@@ -403,7 +403,7 @@ setInterval(()=>{const t=tget();if(!t)return;
 function card(h,d){
   const l=lg(h,d),dn=isDone(h,d),sk=l[1];
   const wd=h.repeat==="weekly"?[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length:0;
-  const sub=sk?"Skipped":h.repeat==="weekly"?`${wd}/${h.wk} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
+  const sub=sk?"Skipped":h.repeat==="weekly"?`${wd}/${Math.min(h.wk,[0,1,2,3,4,5,6].filter(i=>!inVac(add(mon(S.today),i))).length)} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
   let right;
   if(h.kind==="timer"){
     const t=tget(),mine=!!t&&t.id===h.id;

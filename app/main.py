@@ -146,9 +146,10 @@ def weekly_stats(h, hl, t, vac=(), ws=0):
         if d <= t and is_done(h, l): total += 1; per[mon(d)] = per.get(mon(d), 0) + 1
     cur = best = hit = due = 0; m = mon(first)
     while m <= mon(t):
-        ok = per.get(m, 0) >= wk
-        if ok: cur += 1; best = max(best, cur); hit += 1; due += 1
-        elif m < mon(t) and m != mon(first) and not all(in_vac(m + datetime.timedelta(days=i), vac) for i in range(7)): cur = 0; due += 1
+        avail = 7 - sum(in_vac(m + datetime.timedelta(days=i), vac) for i in range(7))     # vacation days lower the goal of that week
+        ok = per.get(m, 0) >= min(wk, avail) and (avail > 0 or per.get(m, 0) > 0)
+        if ok and avail > 0: cur += 1; best = max(best, cur); hit += 1; due += 1
+        elif m < mon(t) and m != mon(first) and avail > 0: cur = 0; due += 1
         m += datetime.timedelta(days=7)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
