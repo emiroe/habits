@@ -397,7 +397,7 @@ let tfin=false,tlast=null;
 async function tautofinish(t){
   if(tfin)return;tfin=true;
   try{const h=S.habits.find(x=>x.id===t.id),mins=Math.round(tinfo(t).focus/60);tset(null);
-    if(h&&mins>0){await api("POST","/api/log",{habit_id:t.id,day:t.day,count:lg(h,t.day)[0]+mins});if(navigator.vibrate)navigator.vibrate([250,120,250])}
+    if(h&&mins>0){await api("POST","/api/log",{habit_id:t.id,day:t.day,count:lg(h,t.day)[0]+mins});ding();if(navigator.vibrate)navigator.vibrate([250,120,250])}
     await refresh()}finally{tfin=false}
 }
 setInterval(()=>{const t=tget();if(!t)return;
@@ -522,13 +522,20 @@ function confetti(el,col){
     document.body.appendChild(s);setTimeout(()=>s.remove(),750);
   }
 }
+let AC=null;
+function ding(){   // soft two-note chime when a habit is finished (Settings > Sounds)
+  if(!PF_.sounds)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume();
+    [[784,0],[1175,.09]].forEach(([f,t])=>{const o=AC.createOscillator(),g=AC.createGain(),a=AC.currentTime+t;o.type="sine";o.frequency.value=f;
+      g.gain.setValueAtTime(0,a);g.gain.linearRampToValueAtTime(.18,a+.015);g.gain.exponentialRampToValueAtTime(.0001,a+.5);o.connect(g);g.connect(AC.destination);o.start(a);o.stop(a+.55)})}catch(e){}}
+document.addEventListener("pointerdown",()=>{try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")AC.resume()}catch(e){}},{once:true});
 async function setCount(h,d,n,opts){
   if(d>S.today)return{p:Promise.resolve(),became:false};
   const c=Math.max(0,n),was=isDone(h,d);
   logs[h.id+"|"+d]=c||opts?.skipped?[c,!!opts?.skipped]:null;
   const body={habit_id:h.id,day:d,count:c};if(opts?.skipped!==undefined)body.skipped=opts.skipped;
   const p=api("POST","/api/log",body);
-  return {p,became:!was&&isDone(h,d)};
+  const became=!was&&isDone(h,d);if(became)ding();
+  return {p,became};
 }
 async function swipeSet(id,n){
   const h=S.habits.find(x=>x.id===id),d=sel;
