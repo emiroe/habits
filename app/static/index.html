@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f3ff"><title>Habits</title>
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Habits"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+:root{color-scheme:light;--bg:#f5f3ff;--card:#fff;--card2:#efecfb;--line:#e6e2f5;--txt:#1e1b3b;--dim:#7a7596;--ac:#6c5ce7;--ac2:#9b8cff;--sh:0 2px 10px rgba(80,60,180,.08)}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14121f;--card:#201d30;--card2:#2a2640;--line:#332f4d;--txt:#f1eefc;--dim:#9a94b8;--ac:#8576ff;--ac2:#a99cff;--sh:none}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg)}
+body{color:var(--txt);font:16px/1.35 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent;padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+main{max-width:520px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px 20px}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.top h1{flex:1;margin:0;font-size:28px;letter-spacing:-.03em}
+.top small{display:block;color:var(--dim);font-size:14px;font-weight:500;letter-spacing:0}
+.ib{width:40px;height:40px;border-radius:50%;background:var(--card);box-shadow:var(--sh);font-size:18px}
+/* week strip */
+.strip{display:flex;gap:6px;margin-bottom:16px}
+.strip .nav{width:22px;color:var(--dim);font-size:20px}
+.dy{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 6px;border-radius:18px;background:var(--card);box-shadow:var(--sh);min-width:0}
+.dy span{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase}
+.dy b{font-size:15px}
+.dy.sel{background:linear-gradient(160deg,var(--ac2),var(--ac));color:#fff}.dy.sel span{color:#ffffffcc}
+.dy.fut{opacity:.45}
+.mini{width:26px;height:26px}
+/* hero */
+.hero{border-radius:24px;padding:18px 20px;color:#fff;background:linear-gradient(135deg,#8b7bff,#5b45e0);display:flex;align-items:center;gap:16px;box-shadow:0 8px 24px rgba(108,92,231,.35);margin-bottom:18px}
+.hero .t{flex:1}.hero b{font-size:22px;display:block;letter-spacing:-.02em}.hero span{opacity:.85;font-size:14px}
+.hero svg{flex:none}
+.sec{margin:18px 0 8px;font-size:13px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;display:flex;gap:6px;align-items:center}
+/* habit card */
+.h{display:flex;align-items:center;gap:12px;padding:12px;border-radius:22px;background:var(--card);box-shadow:var(--sh);margin-bottom:10px;position:relative;overflow:hidden;transition:opacity .2s}
+.h .em{width:48px;height:48px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;flex:none}
+.h .tx{flex:1;min-width:0;text-align:left}
+.h .tx b{display:block;font-size:16px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h .tx span{font-size:13px;color:var(--dim)}
+.h.done .tx b{text-decoration:line-through;text-decoration-color:var(--dim);opacity:.65}
+.h.skip{opacity:.5}
+.ck{width:44px;height:44px;flex:none;position:relative;border-radius:50%}
+.ck svg{position:absolute;inset:0}
+.ck .n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.ck:active{transform:scale(.92)}
+.pop{animation:pop .35s}@keyframes pop{40%{transform:scale(1.25)}}
+.cf{position:absolute;width:8px;height:8px;border-radius:50%;pointer-events:none;animation:cf .7s ease-out forwards;z-index:30}
+@keyframes cf{to{transform:translate(var(--x),var(--y)) scale(.3);opacity:0}}
+.empty{text-align:center;color:var(--dim);padding:40px 10px}.empty big{font-size:56px;display:block}
+/* tab bar */
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);box-shadow:0 -4px 20px rgba(80,60,180,.1);padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
+nav div{max-width:520px;margin:0 auto;display:flex;align-items:center;justify-content:space-around}
+nav .tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--dim);width:80px}
+nav .tab i{font-style:normal;font-size:22px}
+nav .tab.on{color:var(--ac)}
+nav .plus{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--ac2),var(--ac));color:#fff;font-size:32px;line-height:1;margin-top:-26px;box-shadow:0 6px 16px rgba(108,92,231,.45)}
+/* sheets */
+.ov{position:fixed;inset:0;background:rgba(20,15,50,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.sheet{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow:auto;border-radius:28px 28px 0 0;padding:18px 18px calc(24px + env(safe-area-inset-bottom));animation:up .25s}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sheet h2{margin:0 0 14px;font-size:22px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.sheet h2 .x{margin-left:auto;font-size:16px;width:34px;height:34px;border-radius:50%;background:var(--card2);color:var(--dim)}
+label.l{display:block;font-size:12px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 6px}
+input.t{width:100%;font:inherit;padding:13px 14px;border-radius:16px;border:2px solid transparent;background:var(--card);color:var(--txt);box-shadow:var(--sh)}
+input.t:focus{outline:0;border-color:var(--ac)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:34px;height:34px;border-radius:50%;border:3px solid transparent;box-shadow:0 0 0 2px transparent}
+.sw.on{border-color:var(--bg);box-shadow:0 0 0 3px var(--txt)}
+.emg{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;background:var(--card);border-radius:16px;padding:8px;max-height:150px;overflow:auto}
+.emg button{font-size:24px;border-radius:12px;padding:4px 0}.emg button.on{background:var(--card2);box-shadow:inset 0 0 0 2px var(--ac)}
+.chip{padding:9px 14px;border-radius:999px;background:var(--card);box-shadow:var(--sh);font-weight:600;font-size:14px}
+.chip.on{background:var(--ac);color:#fff}
+.wd{width:42px;height:42px;padding:0;border-radius:50%}
+.btn{padding:14px;border-radius:18px;font-weight:700;width:100%;margin-top:10px;background:var(--card);box-shadow:var(--sh)}
+.btn.pri{background:linear-gradient(135deg,var(--ac2),var(--ac));color:#fff}.btn.red{color:#e5484d}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.tile{background:var(--card);border-radius:18px;padding:12px 14px;box-shadow:var(--sh)}
+.tile b{display:block;font-size:24px;letter-spacing:-.02em}.tile span{font-size:12px;color:var(--dim);font-weight:600}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:var(--card);padding:10px;border-radius:20px;box-shadow:var(--sh)}
+.cal .hd{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
+.cal .c{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer}
+.cal .c.off{opacity:.3}.cal .c.ok{color:#fff}.cal .c.sk{border:2px dashed var(--dim)}.cal .c.miss{background:var(--card2)}.cal .c.td{box-shadow:0 0 0 2px var(--ac)}
+.cal .c.fu{opacity:.25;cursor:default}
+.mh{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px;font-weight:700}
+.mh button{width:34px;height:34px;border-radius:50%;background:var(--card);box-shadow:var(--sh)}
+.step{display:flex;align-items:center;justify-content:center;gap:18px;margin:12px 0}
+.step button{width:48px;height:48px;border-radius:50%;background:var(--card);box-shadow:var(--sh);font-size:24px}
+.step b{font-size:28px;min-width:90px;text-align:center}
+/* stats */
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;background:var(--card);padding:12px;border-radius:20px;box-shadow:var(--sh)}
+.bars div{flex:1;border-radius:6px 6px 3px 3px;background:linear-gradient(var(--ac2),var(--ac));min-height:3px}
+.bl{display:flex;gap:6px;padding:0 12px;font-size:10px;color:var(--dim);margin-top:4px}.bl span{flex:1;text-align:center}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,auto);grid-auto-columns:1fr;gap:3px;background:var(--card);padding:12px;border-radius:20px;box-shadow:var(--sh)}
+.heat i{aspect-ratio:1;border-radius:3px;background:var(--card2)}
+.rk{display:flex;align-items:center;gap:10px;background:var(--card);padding:10px 12px;border-radius:18px;box-shadow:var(--sh);margin-bottom:8px}
+.rk .em{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.rk .tx{flex:1;min-width:0}.rk b{display:block;font-size:15px}.rk .pb{height:6px;border-radius:9px;background:var(--card2);margin-top:5px;overflow:hidden}.rk .pb i{display:block;height:100%;border-radius:9px}
+.rk em{font-style:normal;font-weight:700;font-size:15px}
+/* login */
+.login{max-width:340px;margin:18vh auto 0;text-align:center}.login .logo{width:84px;height:84px;border-radius:26px;margin:0 auto 14px;display:block}
+.err{color:#e5484d;font-size:14px;min-height:20px;margin-top:8px}
+</style></head><body>
+<main id="app"></main>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const COLORS=["#6c5ce7","#e84393","#ff7675","#fd9644","#f5b700","#2ecc71","#00b8a9","#0abde3","#4a7bff","#a0785a"];
+const EMOJI="💧 🏃 🧘 📚 ✍️ 🛏️ 🥗 🍎 💊 🦷 🚿 🧹 🚭 🍷 📵 💻 🎸 🎨 🌱 🐕 🐈 ☀️ 🌙 🚴 🏋️ 🧠 🇨🇳 🎧 💰 📝 🙏 ☕ 🥤 🍳 🚶 🏊 🧴 📞 ❤️ ⭐ 🎯 🔥 🧺 🪥 🥛 😴 🌿 🕯️".split(" ");
+const PER={morning:["Morning","🌅"],afternoon:["Afternoon","☀️"],evening:["Evening","🌙"],anytime:["Anytime","🕒"]};
+const WD=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+let S=null,sel=null,tab="today",logs={},loaded=null,sheet=null;
+
+const dt=d=>new Date(d+"T12:00:00Z"), iso=d=>d.toISOString().slice(0,10);
+const add=(d,n)=>{const x=dt(d);x.setUTCDate(x.getUTCDate()+n);return iso(x)};
+const wday=d=>(dt(d).getUTCDay()+6)%7;
+const mon=d=>add(d,-wday(d));
+const hex=(c,a)=>c+Math.round(a*255).toString(16).padStart(2,"0");
+
+async function api(m,u,b){
+  const r=await fetch(u,{method:m,headers:b?{"Content-Type":"application/json"}:{},body:b?JSON.stringify(b):undefined});
+  if(r.status===401){S={edit:false};render();throw new Error("401")}
+  if(!r.ok){let e="";try{e=(await r.json()).detail}catch(_){}throw new Error(e||r.status)}
+  return r.json();
+}
+async function load(){
+  S=await api("GET","/api/state");
+  if(!S.edit){render();return}
+  sel=sel||S.today;
+  logs={};for(const [h,d,c,s] of S.logs)logs[h+"|"+d]=[c,s];
+  loaded=S.logs_from;
+  render();
+}
+async function ensureLogs(day){   // older than the state's window: fetch that week
+  if(day>=loaded)return;
+  const a=mon(day),b=add(a,6);
+  const r=await api("GET",`/api/logs?start=${a}&end=${b}`);
+  for(const [h,d,c,s] of r.logs)logs[h+"|"+d]=[c,s];
+  for(const h of S.habits)for(let i=0;i<7;i++)if(!logs[h.id+"|"+add(a,i)])logs[h.id+"|"+add(a,i)]=null;
+}
+const lg=(h,d)=>logs[h.id+"|"+d]||[0,false];
+const sched=(h,d)=>h.days.includes(String(wday(d)));
+const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};
+function visible(d){return S.habits.filter(h=>{const l=lg(h,d);return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
+function dayProg(d){const v=visible(d).filter(h=>!lg(h,d)[1]);return [v.filter(h=>isDone(h,d)).length,v.length]}
+
+function ring(p,size,w,col,track){
+  const r=(size-w)/2,c=2*Math.PI*r;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${track}" stroke-width="${w}"/>
+  <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-dasharray="${c*Math.min(p,1)} ${c}" transform="rotate(-90 ${size/2} ${size/2})" style="transition:stroke-dasharray .4s"/></svg>`;
+}
+function msg(done,total){
+  if(!total)return"Nothing planned today";
+  if(done===total)return"All done, great job! 🎉";
+  if(done===0)return"Let's get started";
+  return done/total>=.5?"Almost there, keep going!":"Nice start!";
+}
+function render(){
+  const a=$("#app");
+  if(!S){a.innerHTML="";return}
+  if(!S.edit){
+    a.innerHTML=`<div class="login"><img class="logo" src="/static/icons/icon-192.png" alt=""><h1 style="margin:0 0 4px">Habits</h1><p style="color:var(--dim);margin:0 0 18px">Sign in to continue</p>
+    <input class="t" id="pw" type="password" placeholder="Password" autocomplete="current-password"><button class="btn pri" id="go">Sign in</button><div class="err" id="er"></div></div>`;
+    const go=async()=>{try{await api("POST","/api/login",{password:$("#pw").value});await load()}catch(e){$("#er").textContent="Wrong password"}};
+    $("#go").onclick=go;$("#pw").onkeydown=e=>{if(e.key==="Enter")go()};return;
+  }
+  a.innerHTML=(tab==="today"?viewToday():viewStats())+`<nav><div>
+    <button class="tab ${tab==="today"?"on":""}" data-t="today"><i>✅</i>Today</button>
+    <button class="plus" id="new" aria-label="New habit">+</button>
+    <button class="tab ${tab==="stats"?"on":""}" data-t="stats"><i>📊</i>Stats</button></div></nav>`;
+  a.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();scrollTo(0,0)});
+  $("#new").onclick=()=>openEdit(null);
+  if(tab==="today")bindToday();
+  const sh=$(".ov");if(sh)sh.remove();
+  if(sheet)sheet();
+}
+function viewToday(){
+  const d=sel,[done,total]=dayProg(d),wk=mon(d),nice=dt(d).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"});
+  let h=`<div class="top"><h1>${d===S.today?"Today":esc(nice.split(",")[0])}<small>${esc(nice)}</small></h1><button class="ib" id="cog" aria-label="Settings">⚙️</button></div><div class="strip"><button class="nav" id="pw_">‹</button>`;
+  for(let i=0;i<7;i++){
+    const x=add(wk,i),[dn,tt]=dayProg(x),fut=x>S.today;
+    h+=`<button class="dy ${x===d?"sel":""} ${fut?"fut":""}" data-d="${x}"><span>${WD[i]}</span>${ring(tt?dn/tt:0,26,4,x===d?"#fff":"var(--ac)",x===d?"#ffffff55":"var(--card2)").replace("<svg","<svg class='mini'")}<b>${+x.slice(8)}</b></button>`;
+  }
+  h+=`<button class="nav" id="nw_">›</button></div>
+  <div class="hero"><div class="t"><b>${done} of ${total} done</b><span>${msg(done,total)}</span></div>${ring(total?done/total:0,72,9,"#fff","#ffffff44")}</div>`;
+  const vis=visible(d);
+  if(!S.habits.length)h+=`<div class="empty"><big>🌱</big>No habits yet.<br>Tap the + to start your first one.</div>`;
+  else if(!vis.length)h+=`<div class="empty"><big>😌</big>Nothing scheduled for this day.</div>`;
+  for(const p of Object.keys(PER)){
+    const hs=vis.filter(x=>x.period===p);if(!hs.length)continue;
+    h+=`<div class="sec">${PER[p][1]} ${PER[p][0]}</div>`;
+    for(const x of hs)h+=card(x,d);
+  }
+  return h;
+}
+function card(h,d){
+  const l=lg(h,d),dn=isDone(h,d),sk=l[1],multi=h.goal>1;
+  const sub=sk?"Skipped":multi?`${l[0]} / ${h.goal} ${esc(h.unit)}`:h.streak>0?`🔥 ${h.streak} day${h.streak>1?"s":""} streak`:(h.unit?esc(h.unit):"Tap to complete");
+  const subm=multi&&h.streak>0&&!sk?`${l[0]} / ${h.goal} ${esc(h.unit)} · 🔥 ${h.streak}`:sub;
+  const ck=dn?`<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="22" fill="${h.color}"/><path d="M13 23l6 6 12-13" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    :multi?ring(l[0]/h.goal,44,5,h.color,hex(h.color,.2))+`<span class="n">${l[0]}</span>`
+    :`<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="${hex(h.color,.35)}" stroke-width="3"/></svg>`;
+  return `<div class="h ${dn?"done":""} ${sk?"skip":""}" data-id="${h.id}"><div class="em" style="background:${hex(h.color,.18)}">${esc(h.emoji)}</div>
+  <button class="tx" data-open="${h.id}"><b>${esc(h.name)}</b><span>${subm}</span></button><button class="ck" data-ck="${h.id}" aria-label="Complete">${ck}</button></div>`;
+}
+function bindToday(){
+  $("#pw_").onclick=()=>go(add(sel,-7));$("#nw_").onclick=()=>go(add(sel,7)>S.today?S.today:add(sel,7));
+  document.querySelectorAll(".dy").forEach(b=>b.onclick=()=>{if(b.dataset.d<=S.today)go(b.dataset.d)});
+  document.querySelectorAll("[data-ck]").forEach(b=>b.onclick=e=>tap(+b.dataset.ck,e));
+  document.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDetail(+b.dataset.open));
+}
+async function go(d){await ensureLogs(d);sel=d;render()}
+function confetti(el,col){
+  const r=el.getBoundingClientRect();
+  for(let i=0;i<16;i++){
+    const s=document.createElement("span");s.className="cf";
+    const a=Math.random()*6.28,k=30+Math.random()*40;
+    s.style.cssText=`position:fixed;left:${r.left+r.width/2}px;top:${r.top+r.height/2}px;background:${i%3?col:COLORS[i%COLORS.length]};--x:${Math.cos(a)*k}px;--y:${Math.sin(a)*k}px`;
+    document.body.appendChild(s);setTimeout(()=>s.remove(),750);
+  }
+}
+async function setCount(h,d,n,opts){
+  const c=Math.max(0,n),was=isDone(h,d);
+  logs[h.id+"|"+d]=c||opts?.skipped?[c,!!opts?.skipped]:null;
+  const body={habit_id:h.id,day:d,count:c};if(opts?.skipped!==undefined)body.skipped=opts.skipped;
+  const p=api("POST","/api/log",body);
+  return {p,became:!was&&isDone(h,d)};
+}
+async function tap(id,ev){
+  const h=S.habits.find(x=>x.id===id),d=sel,l=lg(h,d);
+  const n=h.goal===1?(isDone(h,d)?0:1):(l[0]>=h.goal&&!l[1]?0:l[0]+1);
+  const btn=ev.currentTarget,{p,became}=await setCount(h,d,n);
+  render();
+  if(became){const b=document.querySelector(`[data-ck="${id}"]`);if(b){b.classList.add("pop");confetti(b,h.color)}}
+  if(navigator.vibrate)navigator.vibrate(became?25:8);
+  try{await p}catch(e){}
+  const keep=sel;await refresh();sel=keep;
+}
+async function refresh(){   // reload the server numbers (streaks, summary) without losing the page state
+  const t=document.scrollingElement.scrollTop,s=sheet;const keepLogs={...logs};
+  const st=await api("GET","/api/state");S=st;logs={...keepLogs};
+  for(const [h,d,c,sk] of S.logs)logs[h+"|"+d]=[c,sk];
+  sheet=s;render();document.scrollingElement.scrollTop=t;
+}
+/* ---------- detail sheet ---------- */
+let dId=null,dMonth=null,dLogs={};
+async function openDetail(id){
+  dId=id;dMonth=sel.slice(0,7);dLogs={};
+  const h=S.habits.find(x=>x.id===id);
+  const r=await api("GET",`/api/logs?start=${add(S.today,-399)}&end=${S.today}&habit_id=${id}`);
+  for(const [,d,c,s] of r.logs)dLogs[d]=[c,s];
+  sheet=detailSheet;render();
+}
+function detailSheet(){
+  const h=S.habits.find(x=>x.id===dId);if(!h){sheet=null;return}
+  const ov=document.createElement("div");ov.className="ov";
+  const [y,m]=dMonth.split("-").map(Number),first=`${dMonth}-01`,off=wday(first),dim=new Date(Date.UTC(y,m,0)).getUTCDate();
+  const nm=dt(first).toLocaleDateString("en-GB",{month:"long",year:"numeric",timeZone:"UTC"});
+  let cal=WD.map(w=>`<div class="hd">${w[0]}</div>`).join("")+"<i></i>".repeat(off);
+  for(let i=1;i<=dim;i++){
+    const d=`${dMonth}-${String(i).padStart(2,"0")}`,l=dLogs[d]||[0,false],fu=d>S.today,ok=!l[1]&&l[0]>=h.goal;
+    const cls=fu?"fu":ok?"ok":l[1]?"sk":sched(h,d)&&d>=h.created.slice(0,10)&&d<S.today?"miss":!sched(h,d)?"off":"";
+    cal+=`<div class="c ${cls} ${d===S.today?"td":""}" data-day="${fu?"":d}" ${ok?`style="background:${h.color}"`:""}>${i}</div>`;
+  }
+  const d=sel,l=lg(h,d),multi=h.goal>1;
+  ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${esc(h.emoji)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
+  <div class="tiles"><div class="tile"><b>🔥 ${h.streak}</b><span>Current streak</span></div><div class="tile"><b>🏆 ${h.best}</b><span>Best streak</span></div>
+  <div class="tile"><b>${h.total}</b><span>Times completed</span></div><div class="tile"><b>${h.rate==null?"–":h.rate+"%"}</b><span>Completion rate</span></div></div>
+  ${multi?`<div class="step"><button id="mn">−</button><b>${l[0]} / ${h.goal}<br><small style="font-size:12px;color:var(--dim);font-weight:600">${esc(h.unit)}</small></b><button id="pl">+</button></div>`:""}
+  <div class="mh"><button id="pm">‹</button>${nm}<button id="nm_">›</button></div><div class="cal">${cal}</div>
+  <p style="color:var(--dim);font-size:12px;margin:8px 4px">Tap a day to toggle it. ${multi?"Taps on the calendar complete the whole goal.":""}</p>
+  <button class="btn" id="skp">${l[1]?"Undo skip":"Skip "+(d===S.today?"today":"this day")+" (keeps streak)"}</button>
+  <button class="btn" id="ed">✏️ Edit habit</button></div>`;
+  document.body.appendChild(ov);
+  const close=()=>{sheet=null;ov.remove()};
+  ov.onclick=e=>{if(e.target===ov)close()};$("#cl").onclick=close;
+  $("#pm").onclick=()=>{dMonth=add(`${dMonth}-01`,-1).slice(0,7);ov.remove();detailSheet()};
+  $("#nm_").onclick=()=>{const n=add(`${dMonth}-28`,5).slice(0,7);if(n<=S.today.slice(0,7)){dMonth=n;ov.remove();detailSheet()}};
+  ov.querySelectorAll("[data-day]").forEach(c=>c.onclick=async()=>{
+    const day=c.dataset.day;if(!day)return;
+    const ok=!(dLogs[day]||[0,false])[1]&&(dLogs[day]||[0])[0]>=h.goal,n=ok?0:h.goal;
+    dLogs[day]=n?[n,false]:[0,false];logs[h.id+"|"+day]=n?[n,false]:null;
+    await api("POST","/api/log",{habit_id:h.id,day,count:n});await refresh();
+  });
+  if(multi){$("#mn").onclick=()=>step(h,d,l[0]-1);$("#pl").onclick=()=>step(h,d,l[0]+1)}
+  $("#skp").onclick=async()=>{await api("POST","/api/log",{habit_id:h.id,day:d,skipped:!l[1]});dLogs[d]=null;delete logs[h.id+"|"+d];
+    const r=await api("GET",`/api/logs?start=${d}&end=${d}&habit_id=${h.id}`);for(const [,dd,c,s] of r.logs){dLogs[dd]=[c,s];logs[h.id+"|"+dd]=[c,s]}await refresh()};
+  $("#ed").onclick=()=>{close();openEdit(h)};
+}
+async function step(h,d,n){
+  n=Math.max(0,Math.min(n,h.goal*3));dLogs[d]=n?[n,false]:null;logs[h.id+"|"+d]=n?[n,false]:null;
+  await api("POST","/api/log",{habit_id:h.id,day:d,count:n});await refresh();
+}
+/* ---------- add / edit ---------- */
+function openEdit(h){
+  const f=h?{...h}:{name:"",emoji:"💧",color:COLORS[0],period:"anytime",days:"0123456",goal:1,unit:""};
+  sheet=()=>{
+    const ov=document.createElement("div");ov.className="ov";
+    ov.innerHTML=`<div class="sheet"><h2>${h?"Edit habit":"New habit"}<button class="x" id="cl">✕</button></h2>
+    <input class="t" id="nm" placeholder="Habit name, e.g. Drink water" maxlength="60" value="${esc(f.name)}">
+    <label class="l">Icon</label><div class="emg">${EMOJI.map(e=>`<button data-e="${e}" class="${e===f.emoji?"on":""}">${e}</button>`).join("")}</div>
+    <label class="l">Colour</label><div class="row">${COLORS.map(c=>`<button class="sw ${c===f.color?"on":""}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div>
+    <label class="l">Time of day</label><div class="row">${Object.entries(PER).map(([k,v])=>`<button class="chip ${k===f.period?"on":""}" data-p="${k}">${v[1]} ${v[0]}</button>`).join("")}</div>
+    <label class="l">Repeat on</label><div class="row">${WD.map((w,i)=>`<button class="chip wd ${f.days.includes(i)?"on":""}" data-w="${i}">${w[0]}${w[1]}</button>`).join("")}</div>
+    <label class="l">Daily goal</label><div class="row" style="align-items:center"><input class="t" id="gl" type="number" min="1" max="999" value="${f.goal}" style="width:90px"><input class="t" id="un" placeholder="unit, e.g. glasses" maxlength="20" value="${esc(f.unit)}" style="flex:1"></div>
+    <div class="err" id="er"></div>
+    <button class="btn pri" id="sv">${h?"Save":"Create habit"}</button>${h?`<button class="btn red" id="dl">Delete habit</button>`:""}</div>`;
+    document.body.appendChild(ov);
+    const close=()=>{sheet=null;ov.remove()};
+    ov.onclick=e=>{if(e.target===ov)close()};$("#cl").onclick=close;
+    const sync=()=>{f.name=$("#nm").value;f.goal=+$("#gl").value||1;f.unit=$("#un").value};
+    const redo=()=>{sync();ov.remove();sheet();};
+    ov.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{f.emoji=b.dataset.e;redo()});
+    ov.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{f.color=b.dataset.c;redo()});
+    ov.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{f.period=b.dataset.p;redo()});
+    ov.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{const i=b.dataset.w;f.days=f.days.includes(i)?f.days.replace(i,""):f.days+i;redo()});
+    $("#sv").onclick=async()=>{
+      sync();if(!f.name.trim()){$("#er").textContent="Give your habit a name";return}
+      try{await api("POST",h?"/api/habit/"+h.id:"/api/habit",{name:f.name,emoji:f.emoji,color:f.color,period:f.period,days:f.days,goal:f.goal,unit:f.unit});sheet=null;await refresh()}
+      catch(e){$("#er").textContent=e.message}
+    };
+    if(h)$("#dl").onclick=async()=>{if(confirm(`Delete "${h.name}" and all its history?`)){await api("DELETE","/api/habit/"+h.id);sheet=null;await refresh()}};
+  };
+  sheet();
+}
+function settingsSheet(){
+  const ov=document.createElement("div");ov.className="ov";
+  ov.innerHTML=`<div class="sheet"><h2>Settings<button class="x" id="cl">✕</button></h2>
+  <label class="l">Change password</label><input class="t" id="cu" type="password" placeholder="Current password" autocomplete="current-password" style="margin-bottom:8px">
+  <input class="t" id="nw" type="password" placeholder="New password (min 8 characters)" autocomplete="new-password"><div class="err" id="er"></div>
+  <button class="btn" id="cp">Change password</button><button class="btn red" id="lo">Sign out</button></div>`;
+  document.body.appendChild(ov);
+  const close=()=>{sheet=null;ov.remove()};ov.onclick=e=>{if(e.target===ov)close()};$("#cl").onclick=close;
+  $("#cp").onclick=async()=>{try{await api("POST","/api/password",{current:$("#cu").value,new:$("#nw").value});$("#er").style.color="#2ecc71";$("#er").textContent="Password changed"}catch(e){$("#er").style.color="";$("#er").textContent=e.message}};
+  $("#lo").onclick=async()=>{await fetch("/api/logout",{method:"POST"});sheet=null;S={edit:false};render()};
+}
+/* ---------- stats ---------- */
+function viewStats(){
+  const days=S.days,map=Object.fromEntries(days.map(x=>[x[0],x]));
+  const perfect=days.filter(x=>x[1]===x[2]).length;
+  const last30=days.filter(x=>x[0]>add(S.today,-30)),avg=last30.length?Math.round(100*last30.reduce((a,x)=>a+x[1]/x[2],0)/last30.length):0;
+  let ps=0;for(let i=0;i<400;i++){const x=map[add(S.today,-i)];if(!x)continue;if(x[1]===x[2])ps++;else if(i>0)break}
+  const checks=days.reduce((a,x)=>a+x[1],0);
+  let h=`<div class="top"><h1>Stats<small>Your progress at a glance</small></h1><button class="ib" id="cog">⚙️</button></div>
+  <div class="tiles"><div class="tile"><b>${avg}%</b><span>Avg. completion, 30 days</span></div><div class="tile"><b>🔥 ${ps}</b><span>Perfect-day streak</span></div>
+  <div class="tile"><b>${perfect}</b><span>Perfect days</span></div><div class="tile"><b>${checks}</b><span>Total check-ins</span></div></div>`;
+  const wk=mon(S.today);let bars="",lbl="";
+  for(let i=11;i>=0;i--){
+    const a=add(wk,-7*i),xs=[];for(let j=0;j<7;j++){const x=map[add(a,j)];if(x)xs.push(x[1]/x[2])}
+    const v=xs.length?xs.reduce((p,q)=>p+q,0)/xs.length:0;
+    bars+=`<div style="height:${Math.max(3,v*100)}%" title="${Math.round(v*100)}%"></div>`;lbl+=`<span>${+a.slice(8)}/${+a.slice(5,7)}</span>`;
+  }
+  h+=`<div class="sec">Weekly completion</div><div class="bars">${bars}</div><div class="bl">${lbl}</div>`;
+  let cells="";const st=add(wk,-7*25);
+  for(let i=0;i<26*7;i++){
+    const d=add(st,i);if(d>S.today){cells+=`<i style="opacity:0"></i>`;continue}
+    const x=map[d],p=x?x[1]/x[2]:-1;
+    cells+=`<i title="${d}" style="${p<0?"":`background:${hex("#6c5ce7",p===0?.12:.25+.75*p)}`}"></i>`;
+  }
+  h+=`<div class="sec">Last 26 weeks</div><div class="heat">${cells}</div><div class="sec">Habits</div>`;
+  if(!S.habits.length)h+=`<div class="empty">No habits yet.</div>`;
+  for(const x of [...S.habits].sort((a,b)=>(b.rate??-1)-(a.rate??-1)))
+    h+=`<div class="rk"><div class="em" style="background:${hex(x.color,.18)}">${esc(x.emoji)}</div><div class="tx"><b>${esc(x.name)}</b><span style="font-size:12px;color:var(--dim)">🔥 ${x.streak} · best ${x.best} · ${x.total}×</span>
+    <div class="pb"><i style="width:${x.rate||0}%;background:${x.color}"></i></div></div><em>${x.rate==null?"–":x.rate+"%"}</em></div>`;
+  return h;
+}
+document.addEventListener("click",e=>{if(e.target.id==="cog"){sheet=settingsSheet;render()}});
+load().catch(()=>{});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S&&S.edit&&!sheet)refresh().catch(()=>{})});
+</script></body></html>

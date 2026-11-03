@@ -1,0 +1,26 @@
+name: CI
+on:
+  push: {branches: [main]}
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: habits, POSTGRES_PASSWORD: habits, POSTGRES_DB: habits}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U habits -d habits" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://habits:habits@localhost:5432/habits
+      SECRET_KEY: ci-secret
+      EDIT_PASSWORD: ci-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install fastapi "uvicorn[standard]" "psycopg[binary]" psycopg_pool httpx pytest
+      - run: cd app && python -m pytest ../tests -q
+      - name: Docker image builds
+        run: docker build -t habits:ci .

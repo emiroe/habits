@@ -1,0 +1,233 @@
+import os, hmac, hashlib, time, datetime
+from zoneinfo import ZoneInfo
+from contextlib import asynccontextmanager
+from psycopg_pool import ConnectionPool
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+DB = os.environ["DATABASE_URL"]
+PASSWORD = os.environ.get("EDIT_PASSWORD", "")
+SECRET = os.environ["SECRET_KEY"].encode()
+TZ = ZoneInfo("Europe/Amsterdam")
+pool = ConnectionPool(DB, min_size=1, max_size=5, open=False)
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS habits (id serial PRIMARY KEY, name text NOT NULL, emoji text NOT NULL DEFAULT '✅', color text NOT NULL DEFAULT '#6c5ce7',
+  period text NOT NULL DEFAULT 'anytime',          -- morning | afternoon | evening | anytime
+  days text NOT NULL DEFAULT '0123456',            -- scheduled weekdays, Monday = 0
+  goal int NOT NULL DEFAULT 1, unit text NOT NULL DEFAULT '',   -- goal 8 + unit 'glasses' = a counting habit
+  position int NOT NULL DEFAULT 0, created date NOT NULL);
+CREATE TABLE IF NOT EXISTS logs (habit_id int NOT NULL REFERENCES habits(id) ON DELETE CASCADE, day date NOT NULL,
+  count int NOT NULL DEFAULT 0, skipped boolean NOT NULL DEFAULT false, PRIMARY KEY (habit_id, day));
+CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value text NOT NULL);
+"""
+PERIODS = ("morning", "afternoon", "evening", "anytime")
+LOG_DAYS = 90      # /api/state carries this many days of logs; older ones come from /api/logs
+
+@asynccontextmanager
+async def lifespan(app):
+    pool.open(wait=True)
+    with pool.connection() as c: c.execute(SCHEMA)
+    yield
+    pool.close()
+
+app = FastAPI(lifespan=lifespan)
+
+# Password: starts as EDIT_PASSWORD from .env; once changed in the app a scrypt hash lives in settings.pw_hash and wins.
+# settings.pw_ver is mixed into the cookie signature, so changing the password signs every other device out.
+# Forgot it? DELETE FROM settings WHERE key IN ('pw_hash','pw_ver')  -> the .env password works again.
+def pw_state():
+    with pool.connection() as c: return dict(c.execute("SELECT key,value FROM settings WHERE key IN ('pw_hash','pw_ver')").fetchall())
+def hash_pw(pw, salt=None):
+    salt = salt or os.urandom(16).hex()
+    return salt + "$" + hashlib.scrypt(pw.encode(), salt=salt.encode(), n=2**14, r=8, p=1).hex()
+def pw_ok(pw, st=None):
+    st = pw_state() if st is None else st
+    if "pw_hash" in st:
+        salt, _ = st["pw_hash"].split("$")
+        return hmac.compare_digest(hash_pw(pw, salt), st["pw_hash"])
+    return bool(PASSWORD) and hmac.compare_digest(pw, PASSWORD)
+def sign(ts, ver=None):
+    ver = pw_state().get("pw_ver", "") if ver is None else ver
+    return hmac.new(SECRET + ver.encode(), str(ts).encode(), hashlib.sha256).hexdigest()
+def authed(req: Request):
+    try: ts, sig = req.cookies.get("hb_auth", "").split(".")
+    except ValueError: return False
+    return hmac.compare_digest(sig, sign(ts)) and time.time() - int(ts) < 90 * 86400
+def need_auth(req):
+    if not authed(req): raise HTTPException(401, "login required")
+def today(): return datetime.datetime.now(TZ).date()
+def parse_day(s):
+    try: return datetime.date.fromisoformat(s)
+    except (ValueError, TypeError): raise HTTPException(400, "bad date")
+
+class Login(BaseModel): password: str
+class NewPassword(BaseModel): current: str; new: str
+class HabitIn(BaseModel):
+    name: str; emoji: str = "✅"; color: str = "#6c5ce7"; period: str = "anytime"; days: str = "0123456"; goal: int = 1; unit: str = ""
+class LogIn(BaseModel):
+    habit_id: int; day: str; count: int | None = None; skipped: bool | None = None
+class Order(BaseModel): ids: list[int]
+
+def set_cookie(resp, ver=None):
+    ts = int(time.time())
+    resp.set_cookie("hb_auth", "%d.%s" % (ts, sign(ts, ver)), max_age=90 * 86400, httponly=True, samesite="lax", secure=True)
+
+@app.post("/api/login")
+def login(b: Login, resp: Response):
+    if not pw_ok(b.password): raise HTTPException(403, "wrong password")
+    set_cookie(resp); return {"ok": True}
+
+@app.post("/api/password")
+def change_password(b: NewPassword, req: Request, resp: Response):
+    need_auth(req)
+    st = pw_state()
+    if not pw_ok(b.current, st): raise HTTPException(403, "current password is wrong")
+    if len(b.new) < 8: raise HTTPException(400, "new password needs at least 8 characters")
+    ver = str(int(st.get("pw_ver", "0")) + 1)
+    with pool.connection() as c:
+        for k, v in (("pw_hash", hash_pw(b.new)), ("pw_ver", ver)):
+            c.execute("INSERT INTO settings VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (k, v))
+    set_cookie(resp, ver)       # this device stays signed in, every other one has to log in again
+    return {"ok": True}
+
+@app.post("/api/logout")
+def logout(resp: Response):
+    resp.delete_cookie("hb_auth"); return {"ok": True}
+
+# ---- the maths (pure functions, tested without a database) ----
+def sched(h, d): return str(d.weekday()) in h["days"]
+def is_done(h, l): return bool(l) and not l[1] and l[0] >= h["goal"]
+def start_of(h, hl): return min([h["created"]] + list(hl))      # a habit also exists on days logged before it was created
+
+def habit_stats(h, hl, t):
+    """hl = {day: (count, skipped)}. Streak = consecutive scheduled days done; a skipped day keeps it alive, a day not scheduled is ignored,
+    today not done yet does not break it. Rate = done / due scheduled days (skipped ones excluded, today only once done)."""
+    cur = best = total = hit = due = 0
+    d = start_of(h, hl)
+    while d <= t:
+        l = hl.get(d); done = is_done(h, l)
+        if done: total += 1
+        if sched(h, d) and not (l and l[1]):
+            if done: cur += 1; best = max(best, cur); hit += 1; due += 1
+            elif d != t: cur = 0; due += 1
+        d += datetime.timedelta(days=1)
+    return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
+
+def day_summary(habits, logs, t, n=400):
+    """[[day, done, total]] for the last n days, only days that had something scheduled. Skipped habits do not count."""
+    out = []
+    starts = {h["id"]: start_of(h, logs.get(h["id"], {})) for h in habits}
+    for i in range(n - 1, -1, -1):
+        d = t - datetime.timedelta(days=i); dn = tt = 0
+        for h in habits:
+            if d < starts[h["id"]]: continue
+            l = logs.get(h["id"], {}).get(d)
+            if l and l[1]: continue
+            if sched(h, d) or is_done(h, l):
+                tt += 1; dn += is_done(h, l)
+        if tt: out.append([d.isoformat(), dn, tt])
+    return out
+
+def load(c, only_active_ids=None):
+    habits = [{"id": r[0], "name": r[1], "emoji": r[2], "color": r[3], "period": r[4], "days": r[5], "goal": r[6], "unit": r[7], "position": r[8], "created": r[9]}
+              for r in c.execute("SELECT id,name,emoji,color,period,days,goal,unit,position,created FROM habits ORDER BY position,id").fetchall()]
+    logs = {}
+    for hid, day, cnt, sk in c.execute("SELECT habit_id,day,count,skipped FROM logs").fetchall(): logs.setdefault(hid, {})[day] = (cnt, sk)
+    return habits, logs
+
+@app.get("/api/state")
+def state(req: Request):
+    if not authed(req): return {"edit": False}
+    t = today()
+    with pool.connection() as c: habits, logs = load(c)
+    lo = t - datetime.timedelta(days=LOG_DAYS)
+    out = []
+    for h in habits:
+        st = habit_stats(h, logs.get(h["id"], {}), t)
+        out.append({**h, "created": h["created"].isoformat(), **st})
+    recent = [[hid, d.isoformat(), v[0], v[1]] for hid, hl in logs.items() for d, v in hl.items() if d >= lo]
+    return {"edit": True, "today": t.isoformat(), "habits": out, "logs": recent, "logs_from": lo.isoformat(), "days": day_summary(habits, logs, t)}
+
+@app.get("/api/logs")
+def logs_range(req: Request, start: str, end: str, habit_id: int | None = None):
+    need_auth(req)
+    a, b = parse_day(start), parse_day(end)
+    if (b - a).days > 400: raise HTTPException(400, "range too long")
+    q, args = "SELECT habit_id,day,count,skipped FROM logs WHERE day BETWEEN %s AND %s", [a, b]
+    if habit_id is not None: q += " AND habit_id=%s"; args.append(habit_id)
+    with pool.connection() as c: rows = c.execute(q, args).fetchall()
+    return {"logs": [[r[0], r[1].isoformat(), r[2], r[3]] for r in rows]}
+
+def check(b: HabitIn):
+    b.name = " ".join(b.name.split())
+    if not b.name or len(b.name) > 60: raise HTTPException(400, "name needs 1-60 characters")
+    if b.period not in PERIODS: raise HTTPException(400, "bad period")
+    if not b.days or not set(b.days) <= set("0123456") or len(set(b.days)) != len(b.days): raise HTTPException(400, "pick at least one weekday")
+    b.days = "".join(sorted(b.days))
+    if not 1 <= b.goal <= 999: raise HTTPException(400, "goal must be 1-999")
+    if len(b.unit) > 20 or not (b.emoji.strip() and len(b.emoji) <= 16): raise HTTPException(400, "bad emoji or unit")
+    if len(b.color) != 7 or b.color[0] != "#" or any(ch not in "0123456789abcdefABCDEF" for ch in b.color[1:]): raise HTTPException(400, "bad colour")
+
+@app.post("/api/habit")
+def habit_add(b: HabitIn, req: Request):
+    need_auth(req); check(b)
+    with pool.connection() as c:
+        pos = c.execute("SELECT coalesce(max(position),0)+1 FROM habits").fetchone()[0]
+        i = c.execute("INSERT INTO habits (name,emoji,color,period,days,goal,unit,position,created) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), pos, today())).fetchone()[0]
+    return {"id": i}
+
+@app.post("/api/habit/{hid}")
+def habit_update(hid: int, b: HabitIn, req: Request):
+    need_auth(req); check(b)
+    with pool.connection() as c:
+        n = c.execute("UPDATE habits SET name=%s,emoji=%s,color=%s,period=%s,days=%s,goal=%s,unit=%s WHERE id=%s",
+                      (b.name, b.emoji.strip(), b.color, b.period, b.days, b.goal, b.unit.strip(), hid)).rowcount
+    if not n: raise HTTPException(404, "no such habit")
+    return {"ok": True}
+
+@app.delete("/api/habit/{hid}")
+def habit_delete(hid: int, req: Request):
+    need_auth(req)
+    with pool.connection() as c: c.execute("DELETE FROM habits WHERE id=%s", (hid,))
+    return {"ok": True}
+
+@app.post("/api/habits/order")
+def habit_order(b: Order, req: Request):
+    need_auth(req)
+    with pool.connection() as c:
+        for p, i in enumerate(b.ids, 1): c.execute("UPDATE habits SET position=%s WHERE id=%s", (p, i))
+    return {"ok": True}
+
+@app.post("/api/log")
+def log_set(b: LogIn, req: Request):
+    """Set the count and/or skipped flag of a habit on a day. count=0 and not skipped removes the row."""
+    need_auth(req)
+    d = parse_day(b.day)
+    if d > today(): raise HTTPException(400, "cannot log the future")
+    with pool.connection() as c:
+        h = c.execute("SELECT goal FROM habits WHERE id=%s", (b.habit_id,)).fetchone()
+        if not h: raise HTTPException(404, "no such habit")
+        cur = c.execute("SELECT count,skipped FROM logs WHERE habit_id=%s AND day=%s", (b.habit_id, d)).fetchone() or (0, False)
+        cnt = cur[0] if b.count is None else max(0, min(b.count, 9999))
+        sk = cur[1] if b.skipped is None else b.skipped
+        if b.count is not None and b.skipped is None: sk = False        # counting again undoes a skip
+        if cnt == 0 and not sk: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (b.habit_id, d))
+        else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,%s) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count, skipped=EXCLUDED.skipped",
+                        (b.habit_id, d, cnt, sk))
+    return {"count": cnt, "skipped": sk}
+
+@app.get("/health")
+def health():
+    with pool.connection() as c: c.execute("SELECT 1")
+    return {"ok": True}
+
+@app.get("/manifest.webmanifest")
+def manifest(): return FileResponse("static/manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
+
+@app.get("/")
+def index(): return FileResponse("static/index.html", headers={"Cache-Control": "no-cache"})
+app.mount("/static", StaticFiles(directory="static"), name="static")
