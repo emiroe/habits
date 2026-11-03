@@ -757,7 +757,7 @@ function catPage(c){
 }
 /* ---------- add / edit (full page like Productive) ---------- */
 const openEdit=h=>editPage(h,null,false);
-const UNITS=["times","glasses","pages","kilometers","miles","steps","cups","reps","minutes","hours","liters","calories","custom…"];
+const UNITS=["times","glasses","pages","kilometers","steps","cups","reps","minutes","hours","liters","calories","custom…"];
 const IVL={f:"Focus",s:"Short Break",l:"Long Break"};
 const goalText=f=>f.kind==="timer"?`${ivGoal(f.iv)} min of focus per day`:`${f.goal} ${f.unit||(+f.goal===1?"time":"times")} per day`;
 const ivGoal=iv=>iv.filter(x=>x.t==="f").reduce((a,x)=>a+x.m,0);
@@ -897,7 +897,7 @@ function settingsSheet(){
       <div class="sg">${row("tod","sun","Time of day")}${row("wk","cal","Start week on",S.week_start===6?"Sunday":"Monday")}</div>
       ${tg("badge","badge","Icon badge","See how many habits are due for the current part of day. Add the app to your Home Screen and allow notifications when asked.")}
       ${tg("vac","umb","Vacation mode","Turn on to pause all of your habits and keep your stats.")}
-      <div class="sg">${row("units","ruler","Units of Measure")}${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
+      <div class="sg">${tg2("sounds","snd","Sounds")}${row("tone","note","Notification tone")}${tg2("sugg","sug","Habit Suggestions")}${tg2("pass","lock","Passcode lock")}</div>
       <div class="sg">${row("slate","slate","Clean Slate Protocol")}</div><div class="sg">${row("export","tool","Export Data")}</div>
       <div class="sg">${row("pw","lock","Change password")}<button class="srw" id="lo" style="color:#ff5c5c"><span>Sign out</span></button></div></div>`;
       $("#cl").onclick=close;
