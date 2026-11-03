@@ -57,6 +57,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .h{display:flex;align-items:stretch;background:var(--card);border-radius:14px;margin-bottom:12px;position:relative;transition:opacity .2s}
 .panel .h{background:var(--row)}
 .h .tx{flex:1;min-width:0;display:flex;align-items:center;gap:16px;padding:14px 8px 14px 16px;text-align:left}
+.ic{width:1.05em;height:1.05em;display:block;fill:currentColor;stroke:none;margin:auto}.ic .s{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .h .em{font-size:26px;width:32px;text-align:center;flex:none;line-height:1}
 .h .nm{min-width:0}
 .h .nm b{display:block;font-weight:300;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -144,7 +145,7 @@ nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;backgroun
 .cathead .art{position:absolute;right:16px;top:calc(24px + env(safe-area-inset-top));font-style:normal;font-size:70px;letter-spacing:-12px}
 .cnt2{color:#8c8c92;font-size:16px;font-weight:300;padding:18px 20px 4px}
 .tr{display:flex;align-items:center;gap:18px;width:100%;padding:15px 20px;text-align:left}
-.tr .em{font-size:30px;width:40px;text-align:center;flex:none}.tr b{display:block;font-weight:300;font-size:21px}.tr small{display:block;font-size:15px;font-weight:300;color:#b0b0b5;margin-top:2px}
+.tr .em{font-size:36px;width:44px;text-align:center;flex:none}.tr b{display:block;font-weight:300;font-size:21px}.tr small{display:block;font-size:15px;font-weight:300;color:#b0b0b5;margin-top:2px}
 .empty2{text-align:center;color:#9a9a9f;padding:30px 10px;font-weight:300}
 /* sheets */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fade .2s}
@@ -159,7 +160,7 @@ input.t:focus{outline:0;border-color:var(--ac)}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .sw{width:34px;height:34px;border-radius:50%;border:3px solid transparent;box-shadow:0 0 0 2px transparent}
 .sw.on{border-color:var(--bg);box-shadow:0 0 0 3px var(--txt)}
-.emg{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;background:var(--card);border-radius:16px;padding:8px;max-height:150px;overflow:auto}
+.emg{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;background:var(--card);border-radius:16px;padding:8px;max-height:210px;overflow:auto}
 .emg button{font-size:24px;border-radius:12px;padding:4px 0}.emg button.on{background:var(--card2);box-shadow:inset 0 0 0 2px var(--ac)}
 .chip{padding:9px 14px;border-radius:999px;background:var(--card);box-shadow:var(--sh);font-weight:600;font-size:14px}
 .chip.on{background:var(--ac);color:#fff}
@@ -342,7 +343,7 @@ function card(h,d){
       :`<b style="color:${dn?"#30d158":h.color}">${l[0]}</b><i style="color:${dn?"#30d15888":hex(h.color,.5)}">/${h.goal}</i><small>${esc(h.unit||"times")}</small>`;
     right=`<button class="cnt" data-ck="${h.id}" aria-label="Add one">${cnt}</button>`;
   }
-  return `<div class="hw" data-id="${h.id}"><div class="rv l"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Done</div><div class="rv r">Undo<svg viewBox="0 0 24 24"><path d="M4 9h11a5 5 0 010 10h-3M4 9l4-4M4 9l4 4"/></svg></div><div class="h ${dn?"done":""} ${sk?"skip":""}"><button class="tx" data-open="${h.id}"><span class="em">${esc(h.emoji)}</span>
+  return `<div class="hw" data-id="${h.id}"><div class="rv l"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Done</div><div class="rv r">Undo<svg viewBox="0 0 24 24"><path d="M4 9h11a5 5 0 010 10h-3M4 9l4-4M4 9l4 4"/></svg></div><div class="h ${dn?"done":""} ${sk?"skip":""}"><button class="tx" data-open="${h.id}"><span class="em">${ico(h)}</span>
   <span class="nm"><b>${esc(h.name)}</b><small><i style="color:${h.color}">★</i>${sub}</small></span></button>${right}</div></div>`;
 }
 function bindToday(){
@@ -387,7 +388,7 @@ function viewHabits(){
   let h=topbar("Habits");
   if(!S.habits.length)return h+`<div class="empty">${EMPTYMSG}</div>`;
   S.habits.forEach((x,i)=>{
-    h+=`<div class="h mg"><button class="tx" data-edit="${x.id}"><span class="em">${esc(x.emoji)}</span><span class="nm"><b>${esc(x.name)}</b><small>${daysText(x)} · ${PER[x.period][0]}${x.kind==="timer"?` · ${x.goal} min`:x.goal>1?` · ${x.goal} ${esc(x.unit||"times")}`:""}</small></span></button>
+    h+=`<div class="h mg"><button class="tx" data-edit="${x.id}"><span class="em">${ico(x)}</span><span class="nm"><b>${esc(x.name)}</b><small>${daysText(x)} · ${PER[x.period][0]}${x.kind==="timer"?` · ${x.goal} min`:x.goal>1?` · ${x.goal} ${esc(x.unit||"times")}`:""}</small></span></button>
     <div class="mv"><button data-mv="${x.id}" data-dir="-1" ${i?"":"disabled"} aria-label="Move up">▲</button><button data-mv="${x.id}" data-dir="1" ${i<S.habits.length-1?"":"disabled"} aria-label="Move down">▼</button></div></div>`;
   });
   return h;
@@ -457,7 +458,7 @@ function detailSheet(){
     cal+=`<div class="c ${cls} ${d===S.today?"td":""}" data-day="${fu?"":d}" ${ok?`style="background:${h.color}"`:""}>${i}</div>`;
   }
   const d=sel,l=lg(h,d),multi=h.goal>1||h.kind==="timer",st=h.kind==="timer"?5:1;
-  ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${esc(h.emoji)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
+  ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
   <div class="tiles"><div class="tile"><b>🔥 ${h.streak}</b><span>Current streak</span></div><div class="tile"><b>🏆 ${h.best}</b><span>Best streak</span></div>
   <div class="tile"><b>${h.total}</b><span>Times completed</span></div><div class="tile"><b>${h.rate==null?"–":h.rate+"%"}</b><span>Completion rate</span></div></div>
   ${multi?`<div class="step"><button id="mn">−</button><b>${l[0]} / ${h.goal}<br><small style="font-size:12px;color:var(--dim);font-weight:600">${esc(h.unit)}</small></b><button id="pl">+</button></div>`:""}
@@ -486,7 +487,65 @@ async function step(h,d,n){
   await api("POST","/api/log",{habit_id:h.id,day:d,count:n});await refresh();
 }
 /* ---------- templates (Pick a New One) ---------- */
-const TP=(n,e,c,sb,p,g,u,k)=>({name:n,emoji:e,color:c,sub:sb,period:p,goal:g,unit:u,kind:k||"units"});
+const iF=d=>`<path d="${d}"/>`,iS=d=>`<path class="s" d="${d}"/>`,iC=(x,y,r)=>`<circle cx="${x}" cy="${y}" r="${r}"/>`,iCS=(x,y,r)=>`<circle class="s" cx="${x}" cy="${y}" r="${r}"/>`;
+const HI={
+tomato:iC(12,14,8.5)+iF("M12 6.500C9.500 3.800 6.500 4 5 6c2.500.5 4.500 1 7 .5zM12 6.500c2.500-2.700 5.500-2.500 7-.5-2.500.5-4.500 1-7 .5z")+iS("M12 2.500v4"),
+monitor:`<rect class="s" x="2.500" y="3.500" width="19" height="13" rx="2"/>`+iS("M8 21h8M12 16.500V21"),
+globe:iCS(12,12,9.500)+`<ellipse class="s" cx="12" cy="12" rx="4" ry="9.500"/>`+iS("M2.500 12h19"),
+book:iS("M12 6.500C9.500 4.500 6 4.500 2.500 5.500V18c3.500-1 7-1 9.500 1 2.500-2 6-2 9.500-1V5.500c-3.500-1-7-1-9.500 1zM12 6.500V19"),
+drop:iF("M12 2c4.300 5 7 8.300 7 12a7 7 0 0 1-14 0c0-3.700 2.700-7 7-12z")+`<path d="M9 16a3.500 3.500 0 0 0 3.500 3" class="s" style="stroke:rgba(255,255,255,.55);stroke-width:1.800"/>`,
+dumbbell:iS("M6.500 6.500v11M17.500 6.500v11M3.500 9.500v5M20.500 9.500v5M6.500 12h11")+"",
+tooth:iF("M6.500 3.500c2-.8 3.500.5 5.500.5s3.500-1.300 5.500-.5c2 1 2.500 3.500 1.800 6-.8 3-1 5-1.500 8-.3 2-2.500 2.500-3.200.5-.6-1.700-.7-3.500-2.600-3.500s-2 1.800-2.600 3.500c-.7 2-2.900 1.500-3.200-.5-.5-3-.7-5-1.500-8-.7-2.500-.2-5 1.800-6z"),
+pill:`<g transform="rotate(-45 12 12)"><rect x="2" y="7.500" width="20" height="9" rx="4.500" opacity=".5"/><path d="M12 7.500h5.500a4.500 4.500 0 0 1 0 9H12z"/></g>`,
+bubbles:iCS(9,14,6)+iCS(17,7,3.500)+iCS(18,17,2.200),
+shower:iF("M4 10a8 8 0 0 1 16 0z")+iS("M8 14v2M12 14v3M16 14v2M10 19v2M14 20v2"),
+broom:iS("M19 3l-7.500 8")+iF("M10 10l4.500 4.500-3.500 6.500H4c0-5 2-10 6-11z"),
+wine:iS("M7 3h10l-.8 6.500a4.200 4.200 0 0 1-8.400 0zM12 14v7M8 21h8"),
+phone:`<rect class="s" x="6" y="2.500" width="12" height="19" rx="3"/>`+iS("M10.500 18.500h3"),
+bed:`<rect x="2.500" y="12" width="19" height="6" rx="1.500"/><rect x="2.500" y="6" width="3" height="14" rx="1.500"/><rect x="18.500" y="16" width="3" height="4" rx="1.500"/>`+iC(8.500,9.500,2.500),
+cutlery:`<ellipse cx="7" cy="7" rx="3.200" ry="4.500"/>`+iS("M7 11v10M16 3v6a2.500 2.500 0 0 0 5 0V3M18.500 3v18"),
+apple:iF("M12 7.500c-3-2.200-8-1-8 5 0 5 3 9 5 9 1.500 0 2-.8 3-.8s1.500.8 3 .8c2 0 5-4 5-9 0-6-5-7.200-8-5z")+iS("M12 7.500c0-2 1-3.500 3-4.500"),
+leaf:iF("M20.500 3.500C10 3.500 4 9 4 15.500c0 3 2 5 5 5 6.500 0 11.500-6.500 11.500-17z")+iS("M3.500 21c3-5 6-8 11-11"),
+tree:iF("M12 2l6 8h-3l5 7H4l5-7H6z")+`<rect x="10.500" y="17" width="3" height="5"/>`,
+yin:iCS(12,12,9.500)+iF("M12 2.500a4.750 4.750 0 0 0 0 9.500 4.750 4.750 0 0 1 0 9.500 9.500 9.500 0 0 1 0-19z"),
+alarm:iCS(12,13.500,7.500)+iS("M12 9.500v4l2.500 2M3.500 6.500L6.500 3.500M20.500 6.500L17.500 3.500"),
+bulb:iS("M9 18h6M10 21.500h4M12 2.500a6.500 6.500 0 0 0-3.800 11.800V16.500h7.600v-2.200A6.500 6.500 0 0 0 12 2.500z"),
+note:`<rect class="s" x="4" y="3" width="16" height="18" rx="2.500"/>`+iS("M8 8.500h8M8 12.500h8M8 16.500h5"),
+target:iCS(12,12,9.500)+iCS(12,12,5.500)+iC(12,12,1.800),
+coin:iCS(12,12,9.500)+iS("M12 6.500v11M15 9.500c-.5-1-1.700-1.500-3-1.500-1.700 0-3 .8-3 2.200 0 3.300 6 1.500 6 4.800 0 1.400-1.400 2.500-3 2.500-1.500 0-2.700-.6-3.200-1.800"),
+heart:iF("M12 21s-8.500-5.500-8.500-11.500A4.800 4.800 0 0 1 12 6.500a4.800 4.800 0 0 1 8.500 3C20.500 15.500 12 21 12 21z"),
+chat:iF("M4 4h16a1.500 1.500 0 0 1 1.500 1.500v10A1.500 1.500 0 0 1 20 17h-8l-5 4v-4H4a1.500 1.500 0 0 1-1.500-1.500v-10A1.500 1.500 0 0 1 4 4z"),
+call:iF("M5 3l4 .5 1.500 4-2.500 1.800a11 11 0 0 0 6.700 6.700l1.800-2.500 4 1.500.5 4c0 1.500-1.500 2.500-3 2.500A15.500 15.500 0 0 1 2.500 6C2.500 4.500 3.500 3 5 3z"),
+headphones:iS("M4 16v-4a8 8 0 0 1 16 0v4")+`<rect x="2.500" y="14" width="4.500" height="7" rx="2"/><rect x="17" y="14" width="4.500" height="7" rx="2"/>`,
+film:`<rect class="s" x="3" y="4" width="18" height="16" rx="2.500"/>`+iS("M8 4v16M16 4v16M3 9h5M3 15h5M16 9h5M16 15h5"),
+mic:`<rect x="9" y="2.500" width="6" height="12" rx="3"/>`+iS("M5.500 11.500a6.500 6.500 0 0 0 13 0M12 18v3.500"),
+cup:iF("M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z")+iS("M17 10h1.500a2.500 2.500 0 0 1 0 5H17M8 2.500v2.500M12 2.500v2.500"),
+bowl:iF("M3 11h18a9 9 0 0 1-18 0z")+iS("M7 7.500c1-1.500 1-3 0-4.500M12 7.500c1-1.500 1-3 0-4.500"),
+moon:iF("M20 14.500A8.500 8.500 0 1 1 9.500 4a7 7 0 0 0 10.500 10.500z"),
+run:iC(15,4.500,2.300)+iS("M9.500 21l3-6-3.500-3 2-5 4 3 3.500 1M12.500 15l4 2.500V21M10.500 7L6 9.500"),
+stairs:iS("M3 20h5v-5h5v-5h5V5h3"),
+palette:iF("M12 2.500a9.500 9.500 0 0 0 0 19c1.800 0 2.200-1.300 1.400-2.400-.8-1.100-.2-2.600 1.300-2.600H17a4.500 4.500 0 0 0 4.500-4.500C21.500 7 17.200 2.500 12 2.500z"),
+piggy:`<ellipse cx="11.500" cy="13" rx="8.500" ry="6.500"/>`+iF("M17 7.500l2.500-2.500v5zM6.500 17.500h3V21h-3zM14.500 17.500h3V21h-3z")+`<circle cx="15.500" cy="11.500" r="1" fill="#2a2a2c"/>`,
+calendar:`<rect class="s" x="3.500" y="5" width="17" height="16" rx="2.500"/>`+iS("M3.500 10h17M8 2.500v4M16 2.500v4"),
+receipt:iF("M6 3h12v18l-3-2-3 2-3-2-3 2z"),
+trash:iS("M4 7h16M9.500 7V4h5v3M6.500 7l1 14h9l1-14M10 11v6M14 11v6"),
+basket:iF("M3 10h18l-2 10H5z")+iS("M8 10l3-6M16 10l-3-6"),
+plant:iF("M7 14h10l-1.500 7h-7z")+iS("M12 14V8")+iF("M12 11c-4.500 0-5.500-3.500-5.500-6 3.500 0 5.500 2 5.500 6zM12 13c4.500 0 5.500-3.500 5.500-6-3.500 0-5.500 2-5.500 6z"),
+plate:iCS(12,12,9.500)+iCS(12,12,5),
+mask:iF("M3 8c3-1.500 6-2 9-2s6 .5 9 2v5c0 3.500-4.500 6-9 6s-9-2.500-9-6z"),
+bolt:iF("M13.500 2L5 13.500h6L10 22l9-12h-6z"),
+bag:iF("M4.500 8h15l1 13h-17z")+iS("M8.500 10.500V7a3.500 3.500 0 0 1 7 0v3.500"),
+tray:iS("M3 14h5l1 3h6l1-3h5v6.500H3zM5 14l2-9h10l2 9"),
+shirt:iF("M8 3L2.500 7l3 3.500L8 9v12h8V9l2.500 1.500 3-3.500L16 3a4 4 0 0 1-8 0z"),
+family:iC(8,6.500,3)+iC(17,8,2.300)+iF("M2.500 20c0-4.500 2.500-7.500 5.500-7.500s5.500 3 5.500 7.500zM14 20c0-3 1.500-5.500 3.500-5.500s3.500 2.500 3.500 5.500z"),
+mail:`<rect class="s" x="2.500" y="5" width="19" height="14" rx="2.500"/>`+iS("M3 7l9 6.500L21 7"),
+star:iF("M12 2.500l2.900 6 6.600.9-4.800 4.600 1.200 6.500L12 17.400l-5.900 3.100 1.200-6.500L2.500 9.400l6.600-.9z"),
+stretch:iC(12,4.500,2.500)+iS("M4.500 3.500L9 10h6l4.500-6.500M12 10v5.500M12 15.500l-4 5.500M12 15.500l4 5.500"),
+check:iCS(12,12,9.500)+iS("M7.500 12.500l3 3 6-7")
+};
+const EMAP={"🍅":"tomato","🖥️":"monitor","💻":"monitor","🌍":"globe","📖":"book","📚":"book","💧":"drop","💪":"dumbbell","🏋️":"dumbbell","🦷":"tooth","💊":"pill","🧼":"bubbles","🧴":"bubbles","🚿":"shower","🧹":"broom","🍷":"wine","📵":"phone","🛏️":"bed","🍽️":"cutlery","🥗":"cutlery","🍳":"cutlery","🍎":"apple","🥦":"leaf","🌿":"leaf","🚶":"tree","🧘":"yin","⏰":"alarm","🕯️":"bulb","📝":"note","📓":"note","✍️":"note","🧾":"receipt","🎯":"target","💰":"coin","❤️":"heart","💬":"chat","📞":"call","🎧":"headphones","🎬":"film","🎙️":"mic","☕":"cup","🥣":"bowl","😴":"moon","🌙":"moon","🏃":"run","🪜":"stairs","🎨":"palette","🎸":"palette","🐷":"piggy","📆":"calendar","🗑️":"trash","🧺":"basket","🪴":"plant","😷":"mask","🧠":"bolt","🌬️":"bubbles","🛍️":"bag","📥":"tray","👔":"shirt","👨‍👩‍👧":"family","💌":"mail","🙏":"star","🤸":"stretch","🍬":"star","🥤":"drop","🥛":"drop"};
+const ico=o=>{const e=o.emoji||"";if(e.startsWith("ic:")&&HI[e.slice(3)])return`<svg class="ic" viewBox="0 0 24 24" style="color:${o.color||"#fff"}" aria-hidden="true">${HI[e.slice(3)]}</svg>`;return esc(e)};
+const TP=(n,e,c,sb,p,g,u,k)=>({name:n,emoji:EMAP[e]?"ic:"+EMAP[e]:e,color:c,sub:sb,period:p,goal:g,unit:u,kind:k||"units"});
 const tWater=TP("Drink water","💧","#2aa8ff","Stay hydrated and flush out toxins","morning",8,"glasses"),
  tRead=TP("Read","📖","#ff5c8a","Reading broadens the mind","evening",20,"pages"),
  tEx=TP("Exercise","💪","#ff6a45","Charge your batteries","anytime",30,"min","timer"),
@@ -548,7 +607,7 @@ function closePage(all){
   if(all)ps.forEach(p=>p.remove());else if(ps.length)ps[ps.length-1].remove();
   if(!document.querySelector(".pg"))document.documentElement.style.overflow="";
 }
-function tplRows(list){return list.map((t,i)=>`<button class="tr" data-i="${i}"><span class="em">${t.emoji}</span><span><b>${esc(t.name)}</b><small>${esc(t.sub)}</small></span></button>`).join("")}
+function tplRows(list){return list.map((t,i)=>`<button class="tr" data-i="${i}"><span class="em">${ico(t)}</span><span><b>${esc(t.name)}</b><small>${esc(t.sub)}</small></span></button>`).join("")}
 function bindRows(root,list){root.querySelectorAll(".tr").forEach(b=>b.onclick=()=>editPage(null,list[+b.dataset.i],true))}
 function pickPage(){
   const el=document.createElement("div");el.className="pg";
@@ -591,8 +650,8 @@ function editPage(h,tpl,fromPicker){
   const draw=()=>{
     const keep=el.scrollTop,tod=f.period==="anytime"?"Any time of the day":PER[f.period][0];
     body.innerHTML=`<div class="cd"><input class="fi" id="nm" placeholder="Name" maxlength="60" value="${esc(f.name)}"><div class="hl"></div><textarea class="fi" id="ds" rows="3" maxlength="500" placeholder="Description">${esc(f.description)}</textarea></div>
-    <div class="tl2"><button class="tl" data-pick="emoji" aria-label="Icon"><span>${esc(f.emoji)}</span></button><button class="tl" data-pick="color" aria-label="Colour"><i style="background:${f.color}"></i></button></div>
-    ${ui.pick==="emoji"?`<div class="cd pad"><div class="emg">${EMOJI.map(e=>`<button data-e="${e}" class="${e===f.emoji?"on":""}">${e}</button>`).join("")}</div><input class="mini wide" id="em" placeholder="…or type any emoji" style="margin-top:12px;width:100%"></div>`:""}
+    <div class="tl2"><button class="tl" data-pick="emoji" aria-label="Icon"><span>${ico(f)}</span></button><button class="tl" data-pick="color" aria-label="Colour"><i style="background:${f.color}"></i></button></div>
+    ${ui.pick==="emoji"?`<div class="cd pad"><div class="emg">${Object.keys(HI).map(k=>`<button data-e="ic:${k}" class="${"ic:"+k===f.emoji?"on":""}">${ico({emoji:"ic:"+k,color:f.color})}</button>`).join("")}${EMOJI.map(e=>`<button data-e="${e}" class="${e===f.emoji?"on":""}">${e}</button>`).join("")}</div><input class="mini wide" id="em" placeholder="…or type any emoji" style="margin-top:12px;width:100%"></div>`:""}
     ${ui.pick==="color"?`<div class="cd pad"><div class="row">${COLORS.map(c=>`<button class="sw ${c===f.color?"on":""}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div></div>`:""}
     <div class="cd"><button class="rw" data-tgl="rep"><span>Repeat</span><span class="dd">${daysText(f)} ${CH}</span></button>
       ${ui.rep?`<div class="exp"><button class="chip2 ${f.days==="0123456"?"on":""}" data-dp="all">Every day</button><button class="chip2 ${f.days==="01234"?"on":""}" data-dp="wk">Weekdays</button>
@@ -644,7 +703,7 @@ function timerSheet(){
   const h=S.habits.find(x=>x.id===tId);if(!h){sheet=null;return}
   const t=tget(),mine=!!t&&t.id===h.id,other=!!t&&t.id!==h.id,done=lg(h,S.today)[0],oh=other?S.habits.find(x=>x.id===t.id):null;
   const ov=document.createElement("div");ov.className="ov";
-  ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${esc(h.emoji)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
+  ov.innerHTML=`<div class="sheet"><h2><span style="font-size:30px">${ico(h)}</span>${esc(h.name)}<button class="x" id="cl">✕</button></h2>
   <div class="tbig ${mine&&t.run?"go":""}" data-tt="${h.id}">${mmss(mine?telapsed(t):0)}</div><div class="tsub">${done} / ${h.goal} min today</div>
   <div class="trow">${mine?(t.run?`<button class="btn" id="tp">Pause</button>`:`<button class="btn pri" id="ts">Resume</button>`):`<button class="btn pri" id="ts" ${other?"disabled":""}>Start</button>`}${mine?`<button class="btn" id="tx">Stop &amp; log</button>`:""}</div>
   ${other?`<p class="note">The timer for “${esc(oh?oh.name:"another habit")}” is still running. Stop it first.</p>`:""}
@@ -699,7 +758,7 @@ function viewStats(){
   h+=`<div class="sec">Last 26 weeks</div><div class="heat">${cells}</div><div class="sec">Habits</div>`;
   if(!S.habits.length)h+=`<div class="empty">No habits yet.</div>`;
   for(const x of [...S.habits].sort((a,b)=>(b.rate??-1)-(a.rate??-1)))
-    h+=`<div class="rk"><div class="em" style="background:${hex(x.color,.18)}">${esc(x.emoji)}</div><div class="tx"><b>${esc(x.name)}</b><span style="font-size:12px;color:var(--dim)">🔥 ${x.streak} · best ${x.best} · ${x.total}×</span>
+    h+=`<div class="rk"><div class="em" style="background:${hex(x.color,.18)}">${ico(x)}</div><div class="tx"><b>${esc(x.name)}</b><span style="font-size:12px;color:var(--dim)">🔥 ${x.streak} · best ${x.best} · ${x.total}×</span>
     <div class="pb"><i style="width:${x.rate||0}%;background:${x.color}"></i></div></div><em>${x.rate==null?"–":x.rate+"%"}</em></div>`;
   return h;
 }
