@@ -89,7 +89,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
 nav div{max-width:520px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px minmax(0,1fr) minmax(0,1fr);align-items:center}
 nav .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:300;color:#8c8c92;padding:2px 0}
-nav .tab{white-space:nowrap}nav .tab:last-child{font-size:11px;letter-spacing:-.3px}
+nav .tab{white-space:nowrap}
 nav .tab.on{color:var(--ac)}
 nav .plus{justify-self:center;width:58px;height:58px;border-radius:50%;background:var(--ac);color:#fff;font-size:34px;font-weight:300;line-height:1;margin-top:-38px;box-shadow:0 0 0 10px var(--nav)}
 
@@ -319,7 +319,7 @@ function render(){
   document.querySelector('main').className=tab==='today'?'today':'';
   const T=(t,ic,l)=>`<button class="tab ${tab===t?"on":""}" data-t="${t}">${ic}${l}</button>`;
   a.innerHTML=(tab==="today"?viewToday():tab==="habits"?viewHabits():tab==="ach"?viewAch():viewStats())+`<nav><div>${T("today",IC.today,"Today")}${T("habits",IC.list,"Habits")}
-    <button class="plus" id="new" aria-label="New habit">+</button>${T("stats",IC.stats,"Stats")}${T("ach",IC.trophy,"Achievements")}</div></nav>`;
+    <button class="plus" id="new" aria-label="New habit">+</button>${T("stats",IC.stats,"Stats")}${T("ach",IC.trophy,"Awards")}</div></nav>`;
   a.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();scrollTo(0,0)});
   $("#new").onclick=()=>pickPage();
   if(tab==="today")bindToday();
@@ -884,7 +884,8 @@ function viewAch(){
     for(const m of L){const ok=Math.max(v,nm==="Streak"?cur:0)>=m;t++;if(ok)n++;
       h+=`<div class="ach ${ok?"on":""}" data-tip="${ok?"Reached":"Locked"}: ${m} ${u}"><div class="bd" style="${ok?"background:"+hex(c,.2)+";":""}">${ico({emoji:"ic:"+ic,color:ok?c:"#6b7280"})}</div><b>${m}</b></div>`}
     h+=`</div>`}
-  return h.replace(topbar("Achievements"),topbar("Achievements")+`<div class="tiles"><div class="tile"><b>${ico({emoji:"ic:trophy",color:"#f5b700"})}${n}/${t}</b><span>Unlocked</span></div></div>`);
+  const Tl=(k,c,v,l)=>`<div class="tile"><b>${ico({emoji:"ic:"+k,color:c})}${v}</b><span>${l}</span></div>`;
+  return h.replace(topbar("Achievements"),topbar("Achievements")+`<div class="tiles">${Tl("trophy","#f5b700",n+"/"+t,"Unlocked")}${Tl("flame","#ff8a3c",best,"Best streak")}${Tl("check","#2ecc71",checks,"Check-ins")}${Tl("target","#1e90ff",perfect,"Perfect")}</div>`);
 }
 function viewStats(){
   const days=S.days,map=Object.fromEntries(days.map(x=>[x[0],x]));
