@@ -49,8 +49,8 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 @keyframes fadeup{from{opacity:0;transform:translateY(8px)}}
 /* period carousel (loops, selected one centred) */
 .pf{display:flex;justify-content:center;align-items:center;gap:2px;padding:2px 0 14px;margin:0 -16px}
-.pf button{flex:none;padding:8px 14px;border-radius:20px;color:#8c8c92;font-size:14px;font-weight:300;white-space:nowrap}
-@media(max-width:350px){.pf button{padding:8px 9px;font-size:13px}}
+.pf button{flex:none;padding:8px 10px;border-radius:20px;color:#8c8c92;font-size:14px;font-weight:300;white-space:nowrap}
+@media(max-width:350px){.pf button{padding:8px 7px;font-size:13px}}
 .pf button.on{background:#363638;color:#fff;font-weight:400}
 .grp{text-align:center;color:#9a9a9f;font-size:13px;font-weight:300;margin:10px 0 8px}
 /* habit rows */
@@ -327,7 +327,7 @@ async function load(){
   if(!S.edit){render();return}
   sel=sel||S.today;
   try{const n=JSON.parse(sessionStorage.getItem("hbNav")||"null");sessionStorage.removeItem("hbNav");   // refresh button: come back to the same page
-    if(n){if(["today","habits","stats","ach"].includes(n.tab))tab=n.tab;if(["all","morning","afternoon","evening"].includes(n.per))per=n.per;if(/^\d{4}-\d\d-\d\d$/.test(n.sel)&&n.sel>=S.logs_from)sel=n.sel}}catch(e){}
+    if(n){if(["today","habits","stats","ach"].includes(n.tab))tab=n.tab;if(["all","morning","afternoon","evening","chores"].includes(n.per))per=n.per;if(/^\d{4}-\d\d-\d\d$/.test(n.sel)&&n.sel>=S.logs_from)sel=n.sel}}catch(e){}
   logs={};for(const [h,d,c,s] of S.logs)logs[h+"|"+d]=[c,s];applyQueue();
   loaded=S.logs_from;
   render();maybeLock();
@@ -360,7 +360,7 @@ const IC={
  gear:'<svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.3"/><circle cx="8" cy="17" r="2.3"/></svg>',
  refresh:'<svg class="i" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5M19.5 4.5v4.2h-4.2"/></svg>',
  cog:'<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M10.3 3.4h3.4l.6 2.3 1.5.9 2.3-.7 1.7 2.9-1.7 1.7v1.8l1.7 1.7-1.7 2.9-2.3-.7-1.5.9-.6 2.3h-3.4l-.6-2.3-1.5-.9-2.3.7-1.7-2.9 1.7-1.7v-1.8L4.2 8.5l1.7-2.9 2.3.7 1.5-.9z"/></svg>'};
-const PF=[["all","All Day"],["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"]];
+const PF=[["all","All Day"],["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["chores","Chores"]];
 function tree(x,y,k,c1,c2){return `<g transform="translate(${x} ${y}) scale(${k})"><rect x="-1.2" y="0" width="2.4" height="14" fill="#1b4d44"/><path d="M0-30C10-30 16-20 14-9 13-1 6 4 0 4-8 4-14-2-14-10-14-21-8-30 0-30z" fill="${c1}"/><ellipse cx="-3" cy="-17" rx="3.4" ry="2" transform="rotate(35 -3 -17)" fill="${c2}"/><ellipse cx="6" cy="-6" rx="2.6" ry="1.6" transform="rotate(60 6 -6)" fill="${c2}"/></g>`}
 function bird(x,y,k,o){return `<path transform="translate(${x} ${y}) scale(${k})" d="M0 0C3-7 13-8 20-2 13-3 7-1 0 0z" fill="#d9a864" opacity="${o}"/>`}
 function scene(p){
@@ -417,7 +417,7 @@ function panelHtml(d){
   let h=`<div class="pf">`;
   for(const [k,l] of PF)h+=`<button class="${k===per?"on":""}" data-pf="${k}">${l}</button>`;
   h+=`</div>`+(S.vac?`<div class="vacb">Vacation mode is on · habits are paused</div>`:"");
-  const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime"||x.period==="chores");
+  const vis=visible(d).filter(x=>per==="all"||x.period===per||(per!=="chores"&&(x.period==="anytime"||x.period==="chores")));
   if(!vis.length)h+=`<div class="empty">${EMPTYMSG}</div>`;
   for(const [k,l] of GROUPS){
     const rk=x=>lg(x,d)[1]?2:isDone(x,d)?1:0,hs=vis.filter(x=>x.period===k).sort((a,b)=>rk(a)-rk(b));if(!hs.length)continue;
