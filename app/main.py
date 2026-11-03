@@ -219,6 +219,17 @@ def prefs_set(b: PrefsIn, req: Request):
             c.execute("INSERT INTO settings VALUES ('week_start',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (str(b.week_start),))
     return {"ok": True}
 
+class CleanIn(BaseModel): confirm: str
+
+@app.post("/api/clean-slate")
+def clean_slate(b: CleanIn, req: Request):
+    """Delete every habit and log (password and settings stay; vacation periods are cleared)."""
+    need_auth(req)
+    if b.confirm != "CLEAN": raise HTTPException(400, "type CLEAN to confirm")
+    with pool.connection() as c:
+        c.execute("DELETE FROM logs"); c.execute("DELETE FROM habits"); c.execute("DELETE FROM settings WHERE key='vac'")
+    return {"ok": True}
+
 @app.get("/api/logs")
 def logs_range(req: Request, start: str, end: str, habit_id: int | None = None):
     need_auth(req)

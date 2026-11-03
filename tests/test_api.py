@@ -149,3 +149,10 @@ def test_weekly_partial_vacation():
     assert main.habit_stats(w, wl, t)["streak"] == 0                                    # missed the goal
     vac = [(D(2026, 10, 21), D(2026, 10, 25))]                                          # only 2 days left that week: goal becomes 2
     assert main.habit_stats(w, wl, t, vac)["streak"] == 1
+
+def test_clean_slate(c):
+    c.post("/api/habit", json={"name": "gone"})
+    assert c.post("/api/clean-slate", json={"confirm": "no"}).status_code == 400
+    assert len(c.get("/api/state").json()["habits"]) >= 1
+    assert c.post("/api/clean-slate", json={"confirm": "CLEAN"}).status_code == 200
+    s = c.get("/api/state").json(); assert s["habits"] == [] and s["days"] == []
