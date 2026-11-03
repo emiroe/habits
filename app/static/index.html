@@ -946,7 +946,8 @@ function settingsSheet(){
     }
     ov.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{if(b.dataset.go==="ptest"){pushMsg="Sending…";draw();api("POST","/api/push/test").then(r=>{pushMsg=r.sent?"Sent. It should arrive in a moment.":"No device is subscribed yet: turn on Notifications first.";draw()}).catch(e=>{pushMsg=e.message;draw()});return}if(b.dataset.go==="export"){const u=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="habits-"+S.today+".json";a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);return}setPg=b.dataset.go;draw()});
     ov.querySelectorAll("[data-t2]").forEach(b=>b.onclick=()=>{const k=b.dataset.t2;
-      if(k==="push"){const was=pushOn;pushMsg="";(was?pushDisable():pushEnable()).then(()=>{pushOn=!was;draw()}).catch(e=>{pushMsg=e.message;draw()});return}
+      if(k==="push"){const was=pushOn,sw=b.querySelector(".swt"),pp=b.parentNode.querySelector("p"),base=pp.dataset.base||(pp.dataset.base=pp.textContent);pp.textContent=base;
+        sw.classList.toggle("on",!was);(was?pushDisable():pushEnable()).then(()=>{pushOn=!was}).catch(e=>{sw.classList.toggle("on",was);pp.textContent=base+" "+e.message});return}
       if(k==="nudge"){const on=!S.nudge;S.nudge=on;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{nudge:on}).then(()=>{if(on&&!pushOn)pushEnable().then(()=>{pushOn=true;draw()}).catch(e=>{pushMsg=e.message;draw()})}).catch(()=>{});return}
       if(k==="vac"){const on=!S.vac;b.querySelector(".swt").classList.toggle("on",on);api("POST","/api/prefs",{vacation:on}).then(()=>syncState()).then(()=>{dirty=true}).catch(()=>{});return}
       if(k==="badge"&&!PF_.badge&&window.Notification&&Notification.permission==="default")Notification.requestPermission().then(updateBadge);
