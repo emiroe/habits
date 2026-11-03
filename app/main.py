@@ -435,28 +435,40 @@ def timer_stop(req: Request):
     except Exception as e: print("ach error", e)
     return {"minutes": mins}
 
-# ---- sync with the Pomodoro site: a habit with sync='pomodoro' counts the pomodoros finished there (the site is the timer) ----
+# ---- sync with the other trackers: a habit with sync='pomodoro' counts the pomodoros finished on the Pomodoro site, sync='chinese' the minutes
+# studied on the Chinese tracker (the tracker is the timer; the daily goal follows the tracker's goal) ----
 POMODORO_URL = os.environ.get("POMODORO_URL", "https://pomodoro.romijn.app")
-def pomodoro_sync():
+CHINESE_URL = os.environ.get("CHINESE_URL", "https://chinese.romijn.app")
+def sync_counts(src):
+    """-> ({day: count}, goal) from the public /api/state of the tracker."""
     import urllib.request
-    with pool.connection() as c: hs = [r[0] for r in c.execute("SELECT id FROM habits WHERE sync='pomodoro'").fetchall()]
-    if not hs: return
-    d = json.load(urllib.request.urlopen(POMODORO_URL + "/api/state", timeout=10))
-    per = {}
-    for x in d.get("sessions", []):
-        if x.get("pomodoro"): per[x["day"]] = per.get(x["day"], 0) + 1
-    goal = int(d.get("settings", {}).get("daily_goal", 0))
-    t = today(); days = set(per) | {(t - datetime.timedelta(days=i)).isoformat() for i in range(35)}; changed = False
-    with pool.connection() as c:
-        for hid in hs:
-            if 1 <= goal <= 999: c.execute("UPDATE habits SET goal=%s WHERE id=%s AND goal<>%s", (goal, hid, goal))
-            cur = {r[0].isoformat(): (r[1], r[2]) for r in c.execute("SELECT day,count,skipped FROM logs WHERE habit_id=%s", (hid,)).fetchall()}
-            for day in days:
-                want = per.get(day, 0); have = cur.get(day, (0, False))
-                if have[1] or want == have[0] or day > t.isoformat(): continue
-                changed = True
-                if want == 0: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (hid, day))
-                else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,false) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count", (hid, day, want))
+    if src == "pomodoro":
+        d = json.load(urllib.request.urlopen(POMODORO_URL + "/api/state", timeout=10)); per = {}
+        for x in d.get("sessions", []):
+            if x.get("pomodoro"): per[x["day"]] = per.get(x["day"], 0) + 1
+        return per, int(d.get("settings", {}).get("daily_goal", 0))
+    d = json.load(urllib.request.urlopen(CHINESE_URL + "/api/state", timeout=10)); sec = {}
+    for x in d.get("sessions", []): sec[x["day"]] = sec.get(x["day"], 0) + x["seconds"]
+    return {k: round(v / 60) for k, v in sec.items()}, int(d.get("daily_minutes", 0))
+
+def tracker_sync():
+    t = today(); changed = False
+    for src in ("pomodoro", "chinese"):
+        with pool.connection() as c: hs = [r[0] for r in c.execute("SELECT id FROM habits WHERE sync=%s", (src,)).fetchall()]
+        if not hs: continue
+        try: per, goal = sync_counts(src)
+        except Exception as e: print("sync error", src, e); continue
+        days = set(per) | {(t - datetime.timedelta(days=i)).isoformat() for i in range(35)}
+        with pool.connection() as c:
+            for hid in hs:
+                if 1 <= goal <= 999: c.execute("UPDATE habits SET goal=%s WHERE id=%s AND goal<>%s", (goal, hid, goal))
+                cur = {r[0].isoformat(): (r[1], r[2]) for r in c.execute("SELECT day,count,skipped FROM logs WHERE habit_id=%s", (hid,)).fetchall()}
+                for day in days:
+                    want = min(per.get(day, 0), 9999); have = cur.get(day, (0, False))
+                    if have[1] or want == have[0] or day > t.isoformat(): continue
+                    changed = True
+                    if want == 0: c.execute("DELETE FROM logs WHERE habit_id=%s AND day=%s", (hid, day))
+                    else: c.execute("INSERT INTO logs VALUES (%s,%s,%s,false) ON CONFLICT (habit_id,day) DO UPDATE SET count=EXCLUDED.count", (hid, day, want))
     if changed: ach_check()
 
 async def push_loop():
@@ -466,8 +478,8 @@ async def push_loop():
             await asyncio.to_thread(timer_tick)
             if n % 15 == 0: await asyncio.to_thread(push_tick)
             if n % 30 == 0:
-                try: await asyncio.to_thread(pomodoro_sync)
-                except Exception as e: print("pomodoro sync error", e)
+                try: await asyncio.to_thread(tracker_sync)
+                except Exception as e: print("sync error", e)
         except Exception as e: print("push error", e)
         n += 1
         await asyncio.sleep(2)
@@ -591,7 +603,7 @@ def check(b: HabitIn):
             b.goal = min(1440, sum(x["m"] for x in iv if x["t"] == "f"))
     b.intervals = iv
     if not 1 <= b.goal <= (1440 if b.kind == "timer" else 999): raise HTTPException(400, "goal must be 1-999 (1-1440 minutes for a timer)")
-    if b.sync not in (None, "", "pomodoro"): raise HTTPException(400, "bad sync")
+    if b.sync not in (None, "", "pomodoro", "chinese"): raise HTTPException(400, "bad sync")
     if b.remind:
         try: h_, m_ = b.remind.split(":"); assert len(b.remind) == 5 and 0 <= int(h_) < 24 and 0 <= int(m_) < 60
         except Exception: raise HTTPException(400, "bad reminder time")

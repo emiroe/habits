@@ -226,10 +226,21 @@ def test_pomodoro_sync(c, monkeypatch):
     sess = [{"day": t.isoformat(), "pomodoro": True}, {"day": t.isoformat(), "pomodoro": True}, {"day": t.isoformat(), "pomodoro": False}, {"day": y.isoformat(), "pomodoro": True}]
     def fake(url, timeout=0): return io.BytesIO(json.dumps({"sessions": sess, "settings": {"daily_goal": 8}}).encode())
     monkeypatch.setattr(urllib.request, "urlopen", fake)
-    main.pomodoro_sync()
+    main.tracker_sync()
     s = c.get("/api/state").json(); h = s["habits"][0]
     counts = {l[1]: l[2] for l in s["logs"] if l[0] == hid}; assert counts == {t.isoformat(): 2, y.isoformat(): 1} and h["goal"] == 8 and h["sync"] == "pomodoro"
-    sess.pop(0); main.pomodoro_sync()                                                           # a deleted session lowers the count
+    sess.pop(0); main.tracker_sync()                                                           # a deleted session lowers the count
     assert {l[1]: l[2] for l in c.get("/api/state").json()["logs"] if l[0] == hid}[t.isoformat()] == 1
-    c.post("/api/log", json={"habit_id": hid, "day": y.isoformat(), "skipped": True}); sess.clear(); main.pomodoro_sync()
+    c.post("/api/log", json={"habit_id": hid, "day": y.isoformat(), "skipped": True}); sess.clear(); main.tracker_sync()
     assert any(l[1] == y.isoformat() and l[3] for l in c.get("/api/state").json()["logs"])      # skipped days are left alone
+
+def test_chinese_sync(c, monkeypatch):
+    import io, urllib.request
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Learn Mandarin", "unit": "minutes", "goal": 120, "sync": "chinese"}).json()["id"]
+    t = main.today().isoformat()
+    sess = [{"day": t, "seconds": 2766}, {"day": t, "seconds": 1800}]
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"sessions": sess, "daily_minutes": 90}).encode()))
+    main.tracker_sync()
+    s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [76] and s["habits"][0]["goal"] == 90        # 4566 s = 76 min
+    assert c.post("/api/habit", json={"name": "x", "sync": "other"}).status_code == 400
