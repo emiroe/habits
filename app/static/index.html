@@ -341,10 +341,11 @@ async function ensureLogs(day){   // older than the state's window: fetch that w
 }
 const lg=(h,d)=>logs[h.id+"|"+d]||[0,false];
 const sched=(h,d)=>{if(h.end_date&&d>h.end_date)return false;if(inVac(d))return false;const r=h.repeat||"daily";if(h.sync==="trash")return(S.trash||[]).includes(d);
-  if(r==="once")return d===h.created.slice(0,10);if(r==="weekly")return true;
+  if(r==="once")return d===h.created.slice(0,10);if(r==="weekly"||r==="month")return true;
   if(r==="monthly")return(h.mdays||"").split(",").includes(String(+d.slice(8)));return h.days.includes(String(wday(d)))};
 const isDone=(h,d)=>{const l=lg(h,d);return !l[1]&&l[0]>=h.goal};
-function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
+const mDone=(h,d)=>{let n=0;for(let i=1;i<=31;i++)if(isDone(h,d.slice(0,8)+String(i).padStart(2,"0")))n++;return n};
+function visible(d){return S.habits.filter(h=>{const l=lg(h,d);if(h.repeat==="month"&&!inVac(d)){return l[0]>0||l[1]||(d===S.today&&d>=h.created.slice(0,10)&&mDone(h,d)<h.wk)}if(inVac(d)&&d>=h.created.slice(0,10)&&!(h.end_date&&d>h.end_date))return true;return (sched(h,d)&&d>=h.created.slice(0,10))||l[0]>0||l[1]})}
 function dayProg(d){const v=visible(d).filter(h=>!lg(h,d)[1]);return [v.filter(h=>isDone(h,d)).length,v.length]}
 
 function ring(p,size,w,col,track){
@@ -383,6 +384,7 @@ const EMPTYMSG=`${SLOTH}There's nothing due.<br>Time to create new habits!`;
 function dueCount(){   // habits still open today for the current part of day (plus anytime)
   if(!S||!S.habits||inVac(S.today))return 0;const pn=partNow();
   return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"&&h.period!=="chores"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
+    if(h.repeat==="month")return mDone(h,S.today)<h.wk;
     if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length;return wd<h.wk}return true}).length}
 function updateBadge(){try{if(!navigator.setAppBadge)return;const n=PF_.badge?dueCount():0;if(n>0)navigator.setAppBadge(n).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}catch(e){}}
 setInterval(()=>{if(S&&S.edit)updateBadge()},60000);
@@ -476,7 +478,7 @@ function card(h,d){
   const l=lg(h,d),dn=isDone(h,d),sk=l[1];
   const wd=h.repeat==="weekly"?[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length:0;
   const pz=inVac(d)&&!dn&&!sk;
-  const sub=sk?"Skipped":pz?"Paused":h.repeat==="weekly"?`${wd}/${Math.min(h.wk,[0,1,2,3,4,5,6].filter(i=>!inVac(add(mon(S.today),i))).length)} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
+  const sub=sk?"Skipped":pz?"Paused":h.repeat==="month"?`${mDone(h,S.today)}/${h.wk} this month`:h.repeat==="weekly"?`${wd}/${Math.min(h.wk,[0,1,2,3,4,5,6].filter(i=>!inVac(add(mon(S.today),i))).length)} this week`:h.total===0?"New":`${h.streak} day${h.streak===1?"":"s"}`;
   let right;
   if(h.kind==="timer"){
     const t=tget(),mine=!!t&&t.id===h.id;
@@ -527,7 +529,7 @@ function bindSwipe(w){
   row.addEventListener("pointerup",end);row.addEventListener("pointercancel",end);
   row.addEventListener("click",e=>{if(Date.now()-swiped<350){e.stopPropagation();e.preventDefault()}},true);
 }
-const daysText=x=>{const r=x.repeat||"daily";if(x.sync==="trash")return"On collection days";if(r==="once")return"Once";if(r==="weekly")return`${x.wk||1}× per week`;if(r==="monthly")return"Monthly on "+(x.mdays||"").split(",").join(", ");return x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ")};
+const daysText=x=>{const r=x.repeat||"daily";if(x.sync==="trash")return"On collection days";if(r==="once")return"Once";if(r==="weekly")return`${x.wk||1}× per week`;if(r==="month")return`${x.wk||1}× per month`;if(r==="monthly")return"Monthly on "+(x.mdays||"").split(",").join(", ");return x.days==="0123456"?"Every day":x.days.split("").map(i=>WD[i]).join(", ")};
 const GRIP='<svg class="i" viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
 function viewHabits(){
   let h=topbar("Habits");
@@ -693,7 +695,7 @@ function detailSheet(){
   const okd=i=>{if(i<1||i>dim)return false;const l=dLogs[`${dMonth}-${String(i).padStart(2,"0")}`]||[0,false];return !l[1]&&l[0]>=h.goal};
   for(let i=1;i<=dim;i++){
     const d=`${dMonth}-${String(i).padStart(2,"0")}`,l=dLogs[d]||[0,false],fu=d>S.today,ok=okd(i),wd=(off+i-1)%7;
-    const cls=fu?"fu":ok?"ok":l[1]?"sk":h.repeat!=="weekly"&&sched(h,d)&&d>=h.created.slice(0,10)&&d<S.today?"miss":!sched(h,d)?"off":"";
+    const cls=fu?"fu":ok?"ok":l[1]?"sk":h.repeat!=="weekly"&&h.repeat!=="month"&&sched(h,d)&&d>=h.created.slice(0,10)&&d<S.today?"miss":!sched(h,d)?"off":"";
     const jn=ok&&wd>0&&okd(i-1)?" jl":"",jr=ok&&wd<6&&okd(i+1)?" jr":"";
     cal+=`<div class="c ${cls}${jn}${jr} ${d===S.today?"td":""}" data-day="${fu?"":d}"><b>${i}</b></div>`;
   }
@@ -913,7 +915,7 @@ function editPage(h,tpl,fromPicker){
     el.style.setProperty("--ac",f.color);el.style.setProperty("--acf",lum(f.color)>.6?"#1c1c1e":"#fff");
     const md=new Set(f.mdays.split(",").filter(Boolean).map(Number));
     const repBody=f.mode==="daily"?`<div class="exp"><div style="flex:1 1 100%;display:flex;gap:6px;justify-content:space-between">${WDI().map(i=>`<button class="wd2 ${f.days.includes(i)?"on":""}" data-w="${i}">${WD[i].slice(0,1)}</button>`).join("")}</div></div>`
-      :f.mode==="weekly"?`<div class="exp"><span style="flex:1 1 100%;color:#b0b0b5;font-weight:300">Times per week</span><div style="flex:1 1 100%;display:flex;gap:6px;justify-content:space-between">${[1,2,3,4,5,6,7].map(n=>`<button class="wd2 ${f.wk===n?"on":""}" data-wk="${n}">${n}</button>`).join("")}</div></div>`
+      :f.mode==="weekly"||f.mode==="month"?`<div class="exp"><span style="flex:1 1 100%;color:#b0b0b5;font-weight:300">Times per ${f.mode==="month"?"month":"week"}</span><div style="flex:1 1 100%;display:flex;gap:6px;justify-content:space-between">${(f.mode==="month"?[1,2,3,4,5,6,7]:[1,2,3,4,5,6,7]).map(n=>`<button class="wd2 ${f.wk===n?"on":""}" data-wk="${n}">${n}</button>`).join("")}</div></div>`
       :`<div class="exp"><div class="mgrid">${Array.from({length:31},(_,i)=>`<button class="wd2 ${md.has(i+1)?"on":""}" data-md="${i+1}">${i+1}</button>`).join("")}</div></div>`;
     const ivHtml=`<div class="ivs">${f.iv.map((x,i)=>`<div class="ivl"><button class="ivm" data-ivm="${i}">${x.m}m</button><button class="ivt" data-ivt="${i}">${IVL[x.t]}</button>${f.iv.length>1?`<button class="ivx" data-ivx="${i}" aria-label="Remove">${X}</button>`:""}</div>`).join("")}${f.iv.length<12?`<button class="ivadd" data-ivadd="1">Add time interval</button>`:""}</div>`;
     body.innerHTML=`<div class="cd"><input class="fi" id="nm" placeholder="Name" maxlength="60" value="${esc(f.name)}"><div class="hl"></div><textarea class="fi" id="ds" rows="2" maxlength="500" placeholder="Description">${esc(f.description)}</textarea></div>
@@ -922,7 +924,7 @@ function editPage(h,tpl,fromPicker){
     ${ui.pick==="color"?`<div class="cd pad"><div class="row">${COLORS.map(c=>`<button class="sw ${c===f.color?"on":""}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div></div>`:""}
     <div class="cd"><div class="rw"><span>Repeat</span><button class="tg ${f.repOn?"on":""}" data-tg="rep" role="switch" aria-checked="${f.repOn}" aria-label="Repeat"></button></div>
       ${f.repOn?`<div class="hl"></div><button class="rw" data-tgl="rep"><span>${daysText(view())}</span>${ui.rep?CU:CH}</button>
-      ${ui.rep?`<div class="seg">${["daily","weekly","monthly"].map(m=>`<button class="${f.mode===m?"on":""}" data-mode="${m}">${m[0].toUpperCase()+m.slice(1)}</button>`).join("")}</div>${repBody}`:""}`:""}
+      ${ui.rep?`<div class="seg">${[["daily","Daily"],["weekly","Weekly"],["month","Monthly"],["monthly","On dates"]].map(([m,l])=>`<button class="${f.mode===m?"on":""}" data-mode="${m}">${l}</button>`).join("")}</div>${repBody}`:""}`:""}
       <div class="hl"></div><div class="rw"><span>Set end date</span><button class="tg ${ui.end?"on":""}" data-tg="end" role="switch" aria-checked="${ui.end}" aria-label="Set end date"></button></div>
       ${ui.end?`<div class="hl"></div><div class="rw"><span>End</span><input class="dt" type="date" id="ed" min="${S.today}" value="${f.end_date||""}"></div>`:""}</div>
     <div class="cd"><div class="rw"><span>Goal</span><button class="tg ${f.goalOn?"on":""}" data-tg="goal" role="switch" aria-checked="${f.goalOn}" aria-label="Goal"></button></div>

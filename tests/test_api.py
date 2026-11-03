@@ -279,3 +279,13 @@ def test_trash_days(c):
     h = main.sched({"sync": "trash", "days": "", "created": t}, t + datetime.timedelta(days=1)); assert h
     assert not main.sched({"sync": "trash", "days": "", "created": t}, t)
     assert c.post("/api/trash", json={"dates": ["x"]}).status_code == 400
+
+def test_month_habit(c):
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    hid = c.post("/api/habit", json={"name": "Windows", "repeat": "month", "wk": 1}).json()["id"]
+    s = c.get("/api/state").json(); h = s["habits"][0]; assert h["repeat"] == "month" and h["streak"] == 0
+    t = main.today().isoformat()
+    c.post("/api/log", json={"habit_id": hid, "day": t, "count": 1})
+    h = c.get("/api/state").json()["habits"][0]; assert h["streak"] == 1 and h["total"] == 1
+    with main.pool.connection() as cn: hs, lg = main.load(cn)
+    assert main.open_habits(hs, lg, main.today(), [], 0, main.PERIODS) == []       # done this month: no longer open

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS habits (id serial PRIMARY KEY, name text NOT NULL, em
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'units';   -- units | timer (a timer habit's goal and counts are MINUTES)
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS end_date date;                          -- last day the habit is scheduled (NULL = no end)
-ALTER TABLE habits ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'daily';  -- daily (weekdays) | weekly (wk days per week) | monthly (mdays) | once
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'daily';  -- daily (weekdays) | weekly (wk days per week) | month (wk days per month, any day) | monthly (mdays) | once
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS wk int NOT NULL DEFAULT 1;
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS mdays text NOT NULL DEFAULT '';          -- monthly: comma separated dates, e.g. '1,15'
 ALTER TABLE habits ADD COLUMN IF NOT EXISTS remind text NOT NULL DEFAULT '';           -- reminder time 'HH:MM' (push notification), empty = none
@@ -125,7 +125,7 @@ def sched(h, d):
     if h.get("end_date") and d > h["end_date"]: return False
     r = h.get("repeat", "daily")
     if r == "once": return d == h["created"]
-    if r == "weekly": return True                      # any day counts, the goal is wk days per week (see habit_stats)
+    if r in ("weekly", "month"): return True                      # any day counts, the goal is wk days per week (see habit_stats)
     if r == "monthly": return d.day in mset(h)
     return str(d.weekday()) in h["days"]
 def in_vac(d, vac):
@@ -139,6 +139,7 @@ def habit_stats(h, hl, t, vac=(), ws=0):
     cur = best = total = hit = due = 0
     d = start_of(h, hl)
     if h.get("repeat") == "weekly": return weekly_stats(h, hl, t, vac, ws)
+    if h.get("repeat") == "month": return month_stats(h, hl, t)
     while d <= t:
         l = hl.get(d); done = is_done(h, l)
         if done: total += 1
@@ -166,6 +167,19 @@ def weekly_stats(h, hl, t, vac=(), ws=0):
         m += datetime.timedelta(days=7)
     return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
 
+def month_stats(h, hl, t):
+    """'N times per month, any day': a calendar month succeeds with at least wk done days; the streak counts months. The month in progress never
+    breaks it and the first (partial) month does not count against it."""
+    first = start_of(h, hl); n = max(1, h.get("wk", 1)); per = {}; total = 0
+    for d, l in hl.items():
+        if d <= t and is_done(h, l): total += 1; per[(d.year, d.month)] = per.get((d.year, d.month), 0) + 1
+    cur = best = hit = due = 0; y, m = first.year, first.month
+    while (y, m) <= (t.year, t.month):
+        if per.get((y, m), 0) >= n: cur += 1; best = max(best, cur); hit += 1; due += 1
+        elif (y, m) < (t.year, t.month) and (y, m) != (first.year, first.month): cur = 0; due += 1
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return {"streak": cur, "best": best, "total": total, "rate": round(100 * hit / due) if due else None}
+
 def day_summary(habits, logs, t, n=400, vac=()):
     """[[day, done, total]] for the last n days, only days that had something scheduled. Skipped habits do not count."""
     out = []
@@ -176,7 +190,7 @@ def day_summary(habits, logs, t, n=400, vac=()):
             if d < starts[h["id"]]: continue
             l = logs.get(h["id"], {}).get(d)
             if l and l[1]: continue
-            if (sched(h, d) and h.get("repeat") != "weekly" and not in_vac(d, vac)) or is_done(h, l):
+            if (sched(h, d) and h.get("repeat") not in ("weekly", "month") and not in_vac(d, vac)) or is_done(h, l):
                 tt += 1; dn += is_done(h, l)
         if tt: out.append([d.isoformat(), dn, tt])
     return out
@@ -310,6 +324,7 @@ def open_habits(habits, logs, t, vac, ws, parts):
         l = logs.get(h["id"], {}).get(t)
         if (l and l[1]) or is_done(h, l): continue
         if h["repeat"] == "weekly" and sum(is_done(h, logs.get(h["id"], {}).get(mon + datetime.timedelta(days=i))) for i in range(7)) >= h["wk"]: continue
+        if h["repeat"] == "month" and sum(is_done(h, v) for dd, v in logs.get(h["id"], {}).items() if (dd.year, dd.month) == (t.year, t.month)) >= h["wk"]: continue
         out.append(h)
     return out
 
@@ -609,7 +624,7 @@ def check(b: HabitIn):
     if b.period not in PERIODS: raise HTTPException(400, "bad period")
     if not b.days or not set(b.days) <= set("0123456") or len(set(b.days)) != len(b.days): raise HTTPException(400, "pick at least one weekday")
     b.days = "".join(sorted(b.days))
-    if b.repeat not in ("daily", "weekly", "monthly", "once"): raise HTTPException(400, "bad repeat")
+    if b.repeat not in ("daily", "weekly", "monthly", "month", "once"): raise HTTPException(400, "bad repeat")
     if not 1 <= b.wk <= 7: raise HTTPException(400, "times per week must be 1-7")
     try: md = sorted({int(x) for x in b.mdays.split(",") if x.strip()})
     except ValueError: raise HTTPException(400, "bad month days")
