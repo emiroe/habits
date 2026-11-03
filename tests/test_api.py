@@ -265,3 +265,7 @@ def test_reading_sync(c, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=0: io.BytesIO(json.dumps({"stats": [{"start_time": now, "duration": 600}, {"start_time": now + 1000, "duration": 900}]}).encode()))
     main.tracker_sync()
     s = c.get("/api/state").json(); assert [l[2] for l in s["logs"] if l[0] == hid] == [25] and s["habits"][0]["goal"] == 20
+
+def test_chores_period(c):
+    hid = c.post("/api/habit", json={"name": "Chore", "period": "chores"}).json()["id"]
+    assert [h["period"] for h in c.get("/api/state").json()["habits"] if h["id"] == hid] == ["chores"]

@@ -246,7 +246,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const COLORS=["#ffffff","#c7c7cc","#1e90ff","#2aa8ff","#00b8a9","#2ecc71","#a3e635","#f5b700","#fd9644","#ff6a45","#ff3b6b","#ff5c8a","#d946ef","#8a4dff","#a0785a"];
 const EMOJI="💧 🏃 🧘 📚 📖 ✍️ 🛏️ 🥗 🍎 🍽️ 💊 🦷 🧼 🚿 🧹 🚭 🍷 📵 💻 🖥️ 🎸 🎨 🌱 🐕 🐈 ☀️ 🌙 🚴 🚶 🏋️ 💪 🤸 🧠 🇨🇳 🌍 🎧 💰 📝 📓 🙏 ☕ 🥤 🍳 🥣 ⏰ 🍅 😷 🧴 👔 📞 😴 ❤️ ⭐ 🎯 🔥 🧺 🥛 🌿 🕯️".split(" ");
-const PER={morning:["Morning","🌅"],afternoon:["Afternoon","☀️"],evening:["Evening","🌙"],anytime:["Anytime","🕒"]};
+const PER={morning:["Morning","🌅"],afternoon:["Afternoon","☀️"],evening:["Evening","🌙"],anytime:["Anytime","🕒"],chores:["Chores","🧹"]};
 const WD=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const PD={sugg:true,pass:false,mEnd:12,eStart:18,minimal:false,sounds:true,badge:true,read:true,vac:false,units:"metric",wk:"Monday",tone:"Default"};
 let PF_=Object.assign({},PD);try{Object.assign(PF_,JSON.parse(localStorage.getItem("hbPref")||"{}"))}catch(e){}
@@ -382,7 +382,7 @@ const SLOTH=`<svg viewBox="0 0 270 160" aria-hidden="true"><path d="M205 20c10-1
 const EMPTYMSG=`${SLOTH}There's nothing due.<br>Time to create new habits!`;
 function dueCount(){   // habits still open today for the current part of day (plus anytime)
   if(!S||!S.habits||inVac(S.today))return 0;const pn=partNow();
-  return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
+  return S.habits.filter(h=>{if(!sched(h,S.today)||(h.period!==pn&&h.period!=="anytime"&&h.period!=="chores"))return false;const l=lg(h,S.today);if(l[1]||isDone(h,S.today))return false;
     if(h.repeat==="weekly"){const wd=[0,1,2,3,4,5,6].filter(i=>isDone(h,add(mon(S.today),i))).length;return wd<h.wk}return true}).length}
 function updateBadge(){try{if(!navigator.setAppBadge)return;const n=PF_.badge?dueCount():0;if(n>0)navigator.setAppBadge(n).catch(()=>{});else navigator.clearAppBadge().catch(()=>{})}catch(e){}}
 setInterval(()=>{if(S&&S.edit)updateBadge()},60000);
@@ -412,12 +412,12 @@ function render(){
   const hs=document.querySelector(".hscroll");if(hs)hs.scrollLeft=hs.scrollWidth;
 }
 function topbar(title,left){return `<div class="top"><span class="lt">${left||connHtml()}</span><h1>${title}</h1><span class="rt"><button class="ib" id="rf" aria-label="Refresh">${IC.refresh}</button><button class="ib" data-cog aria-label="Settings">${IC.cog}</button></span></div>`}
-const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"]];
+const GROUPS=[["morning","Morning"],["afternoon","Afternoon"],["evening","Evening"],["anytime","Anytime"],["chores","Chores"]];
 function panelHtml(d){
   let h=`<div class="pf">`;
   for(const [k,l] of PF)h+=`<button class="${k===per?"on":""}" data-pf="${k}">${l}</button>`;
   h+=`</div>`+(S.vac?`<div class="vacb">Vacation mode is on · habits are paused</div>`:"");
-  const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime");
+  const vis=visible(d).filter(x=>per==="all"||x.period===per||x.period==="anytime"||x.period==="chores");
   if(!vis.length)h+=`<div class="empty">${EMPTYMSG}</div>`;
   for(const [k,l] of GROUPS){
     const rk=x=>lg(x,d)[1]?2:isDone(x,d)?1:0,hs=vis.filter(x=>x.period===k).sort((a,b)=>rk(a)-rk(b));if(!hs.length)continue;
@@ -909,7 +909,7 @@ function editPage(h,tpl,fromPicker){
     if(g("#nm"))f.name=g("#nm").value;if(g("#ds"))f.description=g("#ds").value;if(g("#ed"))f.end_date=g("#ed").value||null;if(g("#rt"))f.remind=g("#rt").value||"09:00"};
   const view=()=>({repeat:f.repOn?f.mode:"once",wk:f.wk,mdays:f.mdays,days:f.days});
   const draw=()=>{
-    const keep=el.scrollTop,tod=f.period==="anytime"?"Any time of the day":PER[f.period][0];
+    const keep=el.scrollTop,tod=f.period==="anytime"?"Any time of the day":f.period==="chores"?"Chores":PER[f.period][0];
     el.style.setProperty("--ac",f.color);el.style.setProperty("--acf",lum(f.color)>.6?"#1c1c1e":"#fff");
     const md=new Set(f.mdays.split(",").filter(Boolean).map(Number));
     const repBody=f.mode==="daily"?`<div class="exp"><div style="flex:1 1 100%;display:flex;gap:6px;justify-content:space-between">${WDI().map(i=>`<button class="wd2 ${f.days.includes(i)?"on":""}" data-w="${i}">${WD[i].slice(0,1)}</button>`).join("")}</div></div>`
@@ -929,7 +929,7 @@ function editPage(h,tpl,fromPicker){
       ${f.goalOn?`<div class="hl"></div><div class="seg"><button class="${f.kind==="units"?"on":""}" data-kind="units">Units</button><button class="${f.kind==="timer"?"on":""}" data-kind="timer">Timer</button></div>
       ${f.kind==="timer"?ivHtml:`<button class="gl" data-gl="1"><span>${esc(goalText(f))}</span>${CHR}</button>`}`:""}</div>
     <div class="cd"><button class="rw" data-tgl="tod"><span>${tod}</span>${CH}</button>
-      ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button></div>`:""}</div>
+      ${ui.tod?`<div class="hl"></div><div class="exp"><div style="flex:1 1 100%;display:flex;gap:8px">${["morning","afternoon","evening"].map(k=>`<button class="chip2 ${f.period===k?"on":""}" style="flex:1;padding:13px 4px" data-p="${k}">${PER[k][0]}</button>`).join("")}</div><button class="chip2 wide ${f.period==="anytime"?"on":""}" data-p="anytime">Any time of the day</button><button class="chip2 wide ${f.period==="chores"?"on":""}" data-p="chores">Chores</button></div>`:""}</div>
     ${f.kind==="units"?`<div class="cd"><div class="rw"><span>Sync count with</span></div><div class="seg">${[["","Off"],["pomodoro","Pomodoro"],["chinese","Mandarin"],["reading","Reading"]].map(([v,l])=>`<button class="${(f.sync||"")===v?"on":""}" data-sync="${v}">${l}</button>`).join("")}</div>${f.sync?`<p class="note" style="margin:0 16px 12px">${f.sync==="pomodoro"?"The count follows the pomodoros you finish on pomodoro.romijn.app.":f.sync==="reading"?"The count follows the minutes you read on reading.romijn.app.":"The count follows the minutes you study on chinese.romijn.app."}</p>`:""}</div>`:""}
     <div class="cd"><div class="rw"><span>Remind me at</span><button class="tg ${ui.rem?"on":""}" data-tg="rem" role="switch" aria-checked="${ui.rem}" aria-label="Remind me"></button></div>
       ${ui.rem?`<div class="hl"></div><div class="rw"><span>Time</span><input class="dt" type="time" id="rt" value="${f.remind||"09:00"}"></div>`:""}</div>

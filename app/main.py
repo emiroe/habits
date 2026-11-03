@@ -15,7 +15,7 @@ pool = ConnectionPool(DB, min_size=1, max_size=5, open=False)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS habits (id serial PRIMARY KEY, name text NOT NULL, emoji text NOT NULL DEFAULT '✅', color text NOT NULL DEFAULT '#6c5ce7',
-  period text NOT NULL DEFAULT 'anytime',          -- morning | afternoon | evening | anytime
+  period text NOT NULL DEFAULT 'anytime',          -- morning | afternoon | evening | anytime | chores
   days text NOT NULL DEFAULT '0123456',            -- scheduled weekdays, Monday = 0
   goal int NOT NULL DEFAULT 1, unit text NOT NULL DEFAULT '',   -- goal 8 + unit 'glasses' = a counting habit
   position int NOT NULL DEFAULT 0, created date NOT NULL);
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS timer (id int PRIMARY KEY DEFAULT 1 CHECK (id = 1), h
 CREATE TABLE IF NOT EXISTS push_subs (endpoint text PRIMARY KEY, p256dh text NOT NULL, auth text NOT NULL);
 CREATE TABLE IF NOT EXISTS push_sent (key text PRIMARY KEY, day date NOT NULL);
 """
-PERIODS = ("morning", "afternoon", "evening", "anytime")
+PERIODS = ("morning", "afternoon", "evening", "anytime", "chores")   # chores behaves like anytime, in its own section
 LOG_DAYS = 90      # /api/state carries this many days of logs; older ones come from /api/logs
 
 @asynccontextmanager
@@ -307,7 +307,7 @@ def push_tick(now=None):
     def mark(k):
         with pool.connection() as c: c.execute("INSERT INTO push_sent VALUES (%s,%s) ON CONFLICT DO NOTHING", (k, t))
     cur = "morning" if now.hour < pp["m_end"] else "afternoon" if now.hour < pp["e_start"] else "evening"
-    badge = len(open_habits(habits, logs, t, vac, ws, (cur, "anytime")))
+    badge = len(open_habits(habits, logs, t, vac, ws, (cur, "anytime", "chores")))
     for h in open_habits(habits, logs, t, vac, ws, PERIODS):
         k = "r%d" % h["id"]
         if h["remind"] and k not in sent and due(h["remind"]):
@@ -316,7 +316,7 @@ def push_tick(now=None):
         for part, at in (("morning", "06:00"), ("afternoon", "12:00"), ("evening", "18:00")):
             k = "n" + part
             if k in sent or not due(at): continue
-            mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime"))
+            mark(k); hs = open_habits(habits, logs, t, vac, ws, (part, "anytime", "chores"))
             if hs: push_all("%s · %d to do" % (part.capitalize(), len(hs)), ", ".join(h["name"] for h in hs[:6]) + (" …" if len(hs) > 6 else ""), len(hs), k)
 
 # ---- achievements (same milestones as the Awards page): a push when a new one is reached ----
