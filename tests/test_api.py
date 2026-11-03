@@ -326,3 +326,9 @@ def test_cooling_after_done(c):
     assert not main.cooling({**hs[0], "name": "Finish Chinese homework", "repeat": "weekly", "wk": 1, "sync": "homework"}, L, t)
     assert not main.cooling({**hs[0], "name": "Read", "repeat": "weekly", "wk": 3}, L, t)
     assert not main.cooling({**hs[0], "name": "Call parents", "repeat": "weekly", "wk": 1}, {day(5): (1, False)}, t)
+
+
+def test_good_day_medals(c):
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    a = {x["k"]: x for x in c.get("/api/state").json()["ach"]}
+    assert a["good"]["tiers"][0] == 7 and a["gstreak"]["v"] == 0

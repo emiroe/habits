@@ -364,6 +364,7 @@ def push_tick(now=None):
 # ---- achievements: general ones plus medals tied to specific habits (matched by name/sync). Same list for the Awards page and the pushes ----
 def _n(*w): return lambda h: any(x in h["name"].lower() for x in w)
 GEN = [("streak", "Streak Master", "flame", "days in a row", [3, 7, 14, 30, 60, 100, 200, 365]), ("checks", "Check-ins", "check", "check-ins", [10, 50, 100, 250, 500, 1000, 2500, 5000]),
+       ("good", "Good Days", "star", "good days (80%+)", [7, 14, 30, 60, 100, 200, 365]), ("gstreak", "Good Streak", "flame", "good days in a row", [3, 7, 14, 30, 60, 100]),
        ("perfect", "Perfect Days", "target", "perfect days", [1, 7, 14, 30, 60, 100, 200]), ("pstreak", "Perfect Streak", "trophy", "perfect days in a row", [3, 7, 14, 30, 60, 100])]
 # key, title, fallback icon, match, metric (best = best streak, days = days done, sum = summed count / div), div, tiers, unit
 SPEC = [("mandarin", "Mandarin", "globe", lambda h: h["sync"] == "chinese", "sum", 60, [5, 10, 25, 50, 100, 250, 500, 1000], "hours of Mandarin"),
@@ -389,7 +390,13 @@ def ach_values(habits, logs, t, vac, ws):
         if not x: continue
         if x[2] and x[1] == x[2]: ps += 1
         elif i > 0: break
-    v = {"streak": max([s["best"] for s in st.values()] or [0]), "checks": sum(d[1] for d in days), "perfect": sum(1 for d in days if d[2] and d[1] == d[2]), "pstreak": ps}
+    ok = lambda x: x[2] and x[1] * 10 >= x[2] * 8; gs = 0       # good day = 80% or more of what was due
+    for i in range(1100):
+        x = m.get((t - datetime.timedelta(days=i)).isoformat())
+        if not x: continue
+        if ok(x): gs += 1
+        elif i > 0: break
+    v = {"good": sum(1 for d in days if ok(d)), "gstreak": gs, "streak": max([s["best"] for s in st.values()] or [0]), "checks": sum(d[1] for d in days), "perfect": sum(1 for d in days if d[2] and d[1] == d[2]), "pstreak": ps}
     icon = {}
     for k, _, ic, f, met, div, _, _ in SPEC:
         hs = [h for h in habits if f(h)]
@@ -412,11 +419,11 @@ def ach_label(k, x, icon={}):
 def ach_check():
     with pool.connection() as c:
         habits, logs = load(c); vac, ws = prefs(c); r = c.execute("SELECT value FROM settings WHERE key='ach_seen'").fetchone()
-        v2 = c.execute("SELECT 1 FROM settings WHERE key='ach_v2'").fetchone()
+        v2 = c.execute("SELECT 1 FROM settings WHERE key='ach_v3'").fetchone()
         now = ach_reached(ach_values(habits, logs, today(), vac, ws)[0])
         seen = set(json.loads(r[0])) if r else None
         if not v2:        # the new habit-specific medals: record what already exists without a push
-            c.execute("INSERT INTO settings VALUES ('ach_v2','1') ON CONFLICT (key) DO NOTHING")
+            c.execute("INSERT INTO settings VALUES ('ach_v3','1') ON CONFLICT (key) DO NOTHING")
             c.execute("INSERT INTO settings VALUES ('ach_seen',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (json.dumps(sorted(now | (seen or set()))),))
             return
         if seen is None or now - seen:       # first run only records what already exists

@@ -1107,9 +1107,10 @@ function viewStats(){
   const days=S.days,map=Object.fromEntries(days.map(x=>[x[0],x]));
   const perfect=days.filter(x=>x[1]===x[2]).length;
   const last30=days.filter(x=>x[0]>add(S.today,-30)),avg=last30.length?Math.round(100*last30.reduce((a,x)=>a+x[1]/x[2],0)/last30.length):0;
-  let ps=0;for(let i=0;i<400;i++){const x=map[add(S.today,-i)];if(!x)continue;if(x[1]===x[2])ps++;else if(i>0)break}
-  const checks=days.reduce((a,x)=>a+x[1],0),T=(k,c,v,l)=>`<div class="tile"><b>${ico({emoji:"ic:"+k,color:c})}${v}</b><span>${l}</span></div>`;
-  let h=topbar("Statistics")+`<div class="tiles">${T("target","#1e90ff",avg+"%","30-day avg")}${T("flame","#ff8a3c",ps,"Streak")}${T("check","#2ecc71",perfect,"Perfect")}${T("trophy","#f5b700",checks,"Check-ins")}</div>`;
+  const good=x=>x[1]*10>=x[2]*8,goodN=days.filter(good).length;   // good day = 80% or more done
+  let ps=0;for(let i=0;i<1100;i++){const x=map[add(S.today,-i)];if(!x)continue;if(good(x))ps++;else if(i>0)break}
+  const T=(k,c,v,l)=>`<div class="tile"><b>${ico({emoji:"ic:"+k,color:c})}${v}</b><span>${l}</span></div>`;
+  let h=topbar("Statistics")+`<div class="tiles">${T("target","#1e90ff",avg+"%","30-day avg")}${T("flame","#ff8a3c",ps,"Good streak")}${T("star","#f5b700",goodN,"Good days")}${T("check","#2ecc71",perfect,"Perfect")}</div>`;
   const wk=mon(S.today),fd=d=>dt(d).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});let bars="",lbl="";
   for(let i=11;i>=0;i--){
     const a=add(wk,-7*i),xs=[];for(let j=0;j<7;j++){const x=map[add(a,j)];if(x)xs.push(x[1]/x[2])}
@@ -1123,7 +1124,7 @@ function viewStats(){
   for(let i=0;i<W*7;i++){
     const d=add(st,i);if(d>S.today){cells+=`<i style="opacity:0"></i>`;continue}
     const x=map[d],p=x?x[1]/x[2]:-1;
-    cells+=`<i data-tip="${fd(d)} · ${x?`${x[1]} of ${x[2]} done`:"nothing scheduled"}" style="${p<0?"":p===0?"background:#3a3a3d":`background:${HM10[Math.min(9,Math.ceil(p*10)-1)]}`}"></i>`;
+    cells+=`<i data-tip="${fd(d)} · ${x?`${x[1]} of ${x[2]} done${x[1]===x[2]?" · perfect":good(x)?" · good day":""}`:"nothing scheduled"}" style="${p<0?"":p===0?"background:#3a3a3d":`background:${HM10[Math.min(9,Math.ceil(p*10)-1)]}`}"></i>`;
   }
   h+=`<div class="sec">Activity</div><div class="hwrap"><div class="hdays">${WDR().map(w=>`<span>${w}</span>`).join("")}</div><div class="hscroll"><div class="hin"><div class="hml">${ml}</div><div class="heat">${cells}</div></div></div></div>`+`<div class="hmleg"><span>Less</span>${HM10.map(c=>`<i style="background:${c}"></i>`).join("")}<span>More</span></div><div class="sec">Habits</div>`;
   if(!S.habits.length)h+=`<div class="empty">No habits yet.</div>`;
