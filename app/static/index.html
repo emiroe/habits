@@ -1172,6 +1172,9 @@ const fixNav=()=>{const n=document.querySelector("nav");if(n){n.style.display="n
 document.addEventListener("focusout",()=>setTimeout(fixNav,300));
 if(window.visualViewport)visualViewport.addEventListener("resize",()=>setTimeout(fixNav,100));
 window.addEventListener("pageshow",fixNav);
+{let st;const later=ms=>{clearTimeout(st);st=setTimeout(fixNav,ms)};   // also after scrolling stops, a touch ends, a resize/rotation, and every few seconds as a safety net (the toggle is invisible)
+ addEventListener("scroll",()=>later(150),{passive:true});addEventListener("touchend",()=>later(400),{passive:true});addEventListener("resize",()=>later(100));addEventListener("orientationchange",()=>later(300));addEventListener("focus",fixNav);
+ setInterval(()=>{if(!document.hidden)fixNav()},3000)}
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){hiddenAt=Date.now();return}
   if(hiddenAt&&Date.now()-hiddenAt>20*60*1000&&per!=="all"&&per!==partNow()&&!document.querySelector(".pg")){per=partNow();if(S&&S.edit&&tab==="today")render()}   // back after a while: jump to the current part of the day
