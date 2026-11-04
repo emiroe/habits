@@ -332,3 +332,19 @@ def test_good_day_medals(c):
     c.post("/api/clean-slate", json={"confirm": "CLEAN"})
     a = {x["k"]: x for x in c.get("/api/state").json()["ach"]}
     assert a["good"]["tiers"][0] == 7 and a["gstreak"]["v"] == 0
+
+
+def test_push_nudge_sent_once_per_day(c, monkeypatch):
+    import datetime
+    sent = []
+    monkeypatch.setattr(main, "push_all", lambda *a, **k: sent.append(a[0]) or 1)
+    c.post("/api/clean-slate", json={"confirm": "CLEAN"})
+    c.post("/api/habit", json={"name": "Brush", "period": "morning"})
+    with main.pool.connection() as cn:
+        cn.execute("INSERT INTO push_subs VALUES ('e','p','a') ON CONFLICT DO NOTHING")
+        cn.execute("DELETE FROM push_sent")
+    d1 = datetime.datetime.now(main.TZ).replace(hour=6, minute=5)
+    main.push_tick(d1); main.push_tick(d1)
+    assert len(sent) == 1
+    main.push_tick(d1 + datetime.timedelta(days=1)); main.push_tick(d1 + datetime.timedelta(days=1))     # next day: the old key must not block (or repeat)
+    assert len(sent) == 2

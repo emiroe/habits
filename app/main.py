@@ -347,7 +347,7 @@ def push_tick(now=None):
     def due(at):   # from the set time until 3 hours later (a restart or a late phone still delivers it)
         return at <= hm and now - datetime.datetime.combine(t, datetime.time(int(at[:2]), int(at[3:])), TZ) < datetime.timedelta(hours=3)
     def mark(k):
-        with pool.connection() as c: c.execute("INSERT INTO push_sent VALUES (%s,%s) ON CONFLICT DO NOTHING", (k, t))
+        with pool.connection() as c: c.execute("INSERT INTO push_sent VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET day=EXCLUDED.day", (k, t))
     cur = "morning" if now.hour < pp["m_end"] else "afternoon" if now.hour < pp["e_start"] else "evening"
     badge = len(open_habits(habits, logs, t, vac, ws, (cur, "anytime", "chores")))
     for h in open_habits(habits, logs, t, vac, ws, PERIODS):
