@@ -1,4 +1,4 @@
-const CACHE = "hb-v3";
+const CACHE = "hb-v4";
 const PRE = ["/", "/static/fonts/Raleway.ttf", "/static/icons/icon-192.png", "/static/icons/icon-512.png", "/static/icons/apple-touch-icon.png", "/static/icons/favicon.svg"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => Promise.all(PRE.map(u => c.add(u).catch(() => {}))))) });
 self.addEventListener("activate", e => e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k); await self.clients.claim() })()));

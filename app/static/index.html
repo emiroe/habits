@@ -10,7 +10,7 @@
 @font-face{font-family:Raleway;src:url(/static/fonts/Raleway.ttf) format('truetype');font-weight:100 900;font-display:swap}
 :root{color-scheme:dark;--bg:#1a1a1c;--panel:#2a2a2c;--row:#343436;--nav:#1b1b1d;--card:#2a2a2c;--card2:#363639;--line:#3a3a3d;--txt:#f4f4f5;--dim:#8c8c92;--ac:#1e90ff;--ac2:#4aa8ff;--sh:none}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg)}html{background:var(--bg)}html,body,button,input,textarea{touch-action:manipulation}
+html,body{margin:0;background:var(--bg)}html{background:var(--bg)}html,body{height:100%;overflow:hidden;overscroll-behavior:none}#app{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}body.lock #app{overflow:hidden}html,body,button,input,textarea{touch-action:manipulation}
 body.t-today{min-height:100dvh}
 body{font-variant-numeric:lining-nums;color:var(--txt);font:16px/1.35 Raleway,Lato,"Helvetica Neue",-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 main{max-width:520px;margin:0 auto;padding:calc(8px + env(safe-area-inset-top)) 16px 20px}
@@ -86,7 +86,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .mg .mv{display:flex;flex-direction:column;justify-content:center;padding:0 10px}
 .mg .mv button{color:var(--dim);font-size:15px;padding:4px 8px}
 /* tab bar */
-nav{will-change:transform;transform:translateZ(0);position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);border-radius:26px 26px 0 0;padding:10px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
 nav div{max-width:520px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px minmax(0,1fr) minmax(0,1fr);align-items:center}
 nav .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:300;color:#8c8c92;padding:2px 0}
 nav .tab{white-space:nowrap}
@@ -405,7 +405,7 @@ function render(){
   const T=(t,ic,l)=>`<button class="tab ${tab===t?"on":""}" data-t="${t}">${ic}${l}</button>`;
   a.innerHTML=(tab==="today"?viewToday():tab==="habits"?viewHabits():tab==="ach"?viewAch():viewStats())+`<nav><div>${T("today",IC.today,"Today")}${T("habits",IC.list,"Habits")}
     <button class="plus" id="new" aria-label="New habit">+</button>${T("stats",IC.stats,"Stats")}${T("ach",IC.trophy,"Awards")}</div></nav>`;
-  a.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();scrollTo(0,0)});
+  a.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();document.getElementById("app").scrollTop=0});
   $("#new").onclick=()=>PF_.sugg?pickPage():editPage(null,null,false);
   if(tab==="today")bindToday();
   if(tab==="habits")bindHabits();
@@ -674,10 +674,10 @@ async function tap(id){
 }
 async function syncState(){const keep={...logs};S=await api("GET","/api/state");logs=keep;for(const [h,d,c,sk] of S.logs)logs[h+"|"+d]=[c,sk];applyQueue()}   // same as refresh() without redrawing
 async function refresh(){   // reload the server numbers (streaks, summary) without losing the page state
-  const t=document.scrollingElement.scrollTop,s=sheet;const keepLogs={...logs};
+  const t=document.getElementById("app").scrollTop,s=sheet;const keepLogs={...logs};
   const st=await api("GET","/api/state");S=st;logs={...keepLogs};
   for(const [h,d,c,sk] of S.logs)logs[h+"|"+d]=[c,sk];applyQueue();
-  sheet=s;render();document.scrollingElement.scrollTop=t;
+  sheet=s;render();document.getElementById("app").scrollTop=t;
 }
 /* ---------- detail sheet ---------- */
 let dId=null,dMonth=null,dLogs={},dShown=false;
@@ -875,11 +875,11 @@ const TPL=[
 /* ---------- full-screen pages ---------- */
 const X='<svg class="i" viewBox="0 0 24 24"><path d="M5.5 5.5l13 13M18.5 5.5l-13 13"/></svg>',BACK='<svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
 const CH='<svg class="ch" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',CHR='<svg class="ch" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
-function openPage(el){document.body.appendChild(el);document.documentElement.style.overflow="hidden"}
+function openPage(el){document.body.appendChild(el);document.body.classList.add("lock")}
 function closePage(all){
   const ps=document.querySelectorAll(".pg");
   if(all)ps.forEach(p=>p.remove());else if(ps.length)ps[ps.length-1].remove();
-  if(!document.querySelector(".pg"))document.documentElement.style.overflow="";
+  if(!document.querySelector(".pg"))document.body.classList.remove("lock");
 }
 function tplRows(list){return list.map((t,i)=>`<button class="tr" data-i="${i}"><span class="em">${ico(t)}</span><span><b>${esc(t.name)}</b><small>${esc(t.sub)}</small></span></button>`).join("")}
 function bindRows(root,list){root.querySelectorAll(".tr").forEach(b=>b.onclick=()=>editPage(null,list[+b.dataset.i],true))}
@@ -1172,9 +1172,6 @@ const fixNav=()=>{const n=document.querySelector("nav");if(n){n.style.display="n
 document.addEventListener("focusout",()=>setTimeout(fixNav,300));
 if(window.visualViewport)visualViewport.addEventListener("resize",()=>setTimeout(fixNav,100));
 window.addEventListener("pageshow",fixNav);
-{let st;const later=ms=>{clearTimeout(st);st=setTimeout(fixNav,ms)};   // also after scrolling stops, a touch ends, a resize/rotation, and every few seconds as a safety net (the toggle is invisible)
- addEventListener("scroll",()=>later(150),{passive:true});addEventListener("touchend",()=>later(400),{passive:true});addEventListener("resize",()=>later(100));addEventListener("orientationchange",()=>later(300));addEventListener("focus",fixNav);
- setInterval(()=>{if(!document.hidden)fixNav()},3000)}
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden){hiddenAt=Date.now();return}
   if(hiddenAt&&Date.now()-hiddenAt>20*60*1000&&per!=="all"&&per!==partNow()&&!document.querySelector(".pg")){per=partNow();if(S&&S.edit&&tab==="today")render()}   // back after a while: jump to the current part of the day
